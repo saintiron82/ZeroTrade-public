@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - Mirinae #2 (Scalper)</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --accent: #58a6ff;
+    --bull: #3fb950; --bear: #f85149; --trader: #d2a8ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  a { color: var(--accent); text-decoration: none; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap; }
+  .back-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; padding: 4px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--text); cursor: pointer; text-decoration: none; }
+  .back-btn:hover { border-color: var(--accent); }
+  header h1 { font-size: 18px; font-weight: 600; flex: 1; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge.running { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.stopped { background: rgba(248,81,73,0.15); color: var(--red); }
+  .last-analysis { font-size: 12px; color: var(--muted); }
+
+  /* Top Cards */
+  .top-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 768px) { .top-cards { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-item { }
+  .stat-item .label { font-size: 11px; color: var(--muted); }
+  .stat-item .value { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .stat-item .value.up { color: var(--red); }
+  .stat-item .value.down { color: var(--accent); }
+  .stat-item .value.pos { color: var(--green); }
+  .stat-item .value.neg { color: var(--red); }
+
+  /* Debate Panel */
+  .debate-section { margin-bottom: 20px; }
+  .debate-section > h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .debate-panel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 768px) { .debate-panel { grid-template-columns: 1fr; } }
+
+  .agent-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .agent-box.bull { border-top: 3px solid var(--bull); }
+  .agent-box.bear { border-top: 3px solid var(--bear); }
+  .agent-box.trader { border-top: 3px solid var(--trader); }
+
+  .agent-header { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
+  .agent-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .agent-box.bull .agent-icon { background: rgba(63,185,80,0.15); }
+  .agent-box.bear .agent-icon { background: rgba(248,81,73,0.15); }
+  .agent-box.trader .agent-icon { background: rgba(210,168,255,0.15); }
+  .agent-name { font-size: 14px; font-weight: 600; }
+  .agent-box.bull .agent-name { color: var(--bull); }
+  .agent-box.bear .agent-name { color: var(--bear); }
+  .agent-box.trader .agent-name { color: var(--trader); }
+
+  .agent-body { padding: 0 14px 14px; }
+  .agent-opinion { font-size: 13px; line-height: 1.6; margin-bottom: 10px; min-height: 60px; }
+  .agent-reasons { list-style: none; margin-bottom: 10px; }
+  .agent-reasons li { font-size: 12px; color: var(--muted); padding: 3px 0; padding-left: 14px; position: relative; }
+  .agent-reasons li::before { content: '\2022'; position: absolute; left: 0; color: var(--border); }
+  .agent-picks { margin-top: 8px; }
+  .agent-picks-title { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .pick-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pick-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); }
+
+  /* Bottom Grid */
+  .bottom-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px; }
+  @media (max-width: 768px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+  /* Holdings Table */
+  .card table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .card th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .card td { padding: 6px 8px; border-bottom: 1px solid rgba(48,54,61,0.3); white-space: nowrap; }
+  .card td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .trailing-bar { display: inline-block; width: 50px; height: 4px; background: var(--border); border-radius: 2px; vertical-align: middle; }
+  .trailing-fill { height: 100%; border-radius: 2px; background: var(--yellow); }
+
+  /* Decision Timeline */
+  .timeline { max-height: 400px; overflow-y: auto; }
+  .timeline-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(48,54,61,0.3); font-size: 12px; }
+  .timeline-time { color: var(--muted); white-space: nowrap; min-width: 50px; flex-shrink: 0; }
+  .timeline-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; min-width: 36px; text-align: center; flex-shrink: 0; }
+  .timeline-badge.BUY { background: rgba(63,185,80,0.15); color: var(--green); }
+  .timeline-badge.SELL { background: rgba(248,81,73,0.15); color: var(--red); }
+  .timeline-badge.HOLD, .timeline-badge.SKIP, .timeline-badge.WAIT { background: rgba(139,148,158,0.15); color: var(--muted); }
+  .timeline-body { flex: 1; min-width: 0; }
+  .timeline-stock { font-weight: 600; margin-right: 6px; }
+  .timeline-confidence { font-size: 11px; color: var(--muted); }
+  .timeline-reason { font-size: 11px; color: var(--muted); margin-top: 2px; cursor:pointer; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .timeline-reason.collapsed { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .timeline-reason.expanded { background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.18); border-radius:5px; padding:5px 6px; }
+  .timeline-reason::after { content:'  클릭해 펼치기'; color:var(--accent); font-size:10px; opacity:.75; }
+  .timeline-reason.expanded::after { content:'  접기'; }
+
+  .empty-state { color: var(--muted); text-align: center; padding: 30px; font-size: 13px; }
+
+  /* Loading */
+  .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Nav */
+  nav { display: flex; gap: 12px; }
+  nav a { font-size: 13px; }
+
+  /* Criteria */
+  .criteria-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .criteria-label { width:90px; font-size:11px; color:var(--muted); flex-shrink:0; }
+  .criteria-bar-bg { flex:1; height:16px; background:var(--bg); border-radius:3px; overflow:hidden; position:relative; }
+  .criteria-bar { height:100%; border-radius:3px; transition:width 0.5s; display:flex; align-items:center; padding-left:6px; font-size:10px; font-weight:600; color:#fff; }
+  .criteria-detail { font-size:10px; color:var(--muted); width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <a href="/pipes" class="back-btn">&larr; Pipes</a>
+    <h1>Mirinae #2 &mdash; AI Scalper (단타)</h1>
+    <div class="header-right">
+      <button id="judgeBtn" onclick="manualJudge()" style="padding:5px 14px;border:1px solid var(--accent);border-radius:6px;background:rgba(88,166,255,0.1);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">🧠 수동 판단</button>
+      <span id="status-badge" class="badge stopped">STOPPED</span>
+      <span id="last-analysis" class="last-analysis">--</span>
+    </div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/pipes">Pipes</a>
+      <a href="/bots">Bots</a>
+      <a href="/trades">Trades</a>
+      <a href="/news">News</a>
+    </nav>
+  </header>
+
+  <!-- Top 3 Cards -->
+  <div class="top-cards">
+    <!-- Portfolio -->
+    <div class="card">
+      <h2>Portfolio</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="label">Holdings</div>
+          <div class="value" id="s-holdings">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Eval P&L</div>
+          <div class="value" id="s-eval-pnl">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Budget</div>
+          <div class="value" id="s-budget">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Usage</div>
+          <div class="value" id="s-usage">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Performance -->
+    <div class="card">
+      <h2>Today</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="label">Trades</div>
+          <div class="value" id="s-trades">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Win Rate</div>
+          <div class="value" id="s-winrate">--</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Realized P&L</div>
+          <div class="value" id="s-realized">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Return</div>
+          <div class="value" id="s-return">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Status -->
+    <div class="card">
+      <h2>AI Status</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="label">Generation</div>
+          <div class="value" id="s-gen">--</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Last Decision</div>
+          <div class="value" id="s-last-decision" style="font-size:13px">--</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Avg Confidence</div>
+          <div class="value" id="s-confidence">--</div>
+        </div>
+        <div class="stat-item">
+          <div class="label">Scans</div>
+          <div class="value" id="s-scans">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Debate Panel -->
+  <div class="debate-section">
+    <h2>Agent Debate</h2>
+    <div class="debate-panel">
+      <!-- Bull Analyst -->
+      <div class="agent-box bull">
+        <div class="agent-header">
+          <div class="agent-icon">&#x1F402;</div>
+          <div class="agent-name">Bull Analyst</div>
+        </div>
+        <div class="agent-body">
+          <div class="agent-opinion" id="bull-opinion">Waiting for analysis...</div>
+          <ul class="agent-reasons" id="bull-reasons"></ul>
+          <div class="agent-picks" id="bull-picks-wrap" style="display:none">
+            <div class="agent-picks-title">Picks</div>
+            <div class="pick-chips" id="bull-picks"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bear Analyst -->
+      <div class="agent-box bear">
+        <div class="agent-header">
+          <div class="agent-icon">&#x1F43B;</div>
+          <div class="agent-name">Bear Analyst</div>
+        </div>
+        <div class="agent-body">
+          <div class="agent-opinion" id="bear-opinion">Waiting for analysis...</div>
+          <ul class="agent-reasons" id="bear-reasons"></ul>
+          <div class="agent-picks" id="bear-picks-wrap" style="display:none">
+            <div class="agent-picks-title">Warnings</div>
+            <div class="pick-chips" id="bear-picks"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trader -->
+      <div class="agent-box trader">
+        <div class="agent-header">
+          <div class="agent-icon">&#x2696;</div>
+          <div class="agent-name">Trader</div>
+        </div>
+        <div class="agent-body">
+          <div class="agent-opinion" id="trader-opinion">Waiting for decision...</div>
+          <ul class="agent-reasons" id="trader-reasons"></ul>
+          <div class="agent-picks" id="trader-picks-wrap" style="display:none">
+            <div class="agent-picks-title">Actions</div>
+            <div class="pick-chips" id="trader-picks"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Criteria Scores -->
+  <div class="card" style="margin-bottom:20px">
+    <h2 style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">판단 기준별 점수</h2>
+    <div id="criteria-chart">
+      <div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">분석 대기 중...</div>
+    </div>
+  </div>
+
+  <!-- Bottom: Holdings + Timeline -->
+  <div class="bottom-grid">
+    <!-- Holdings -->
+    <div class="card">
+      <h2>Holdings</h2>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th style="text-align:right">Qty</th>
+              <th style="text-align:right">Avg</th>
+              <th style="text-align:right">Price</th>
+              <th style="text-align:right">P&L</th>
+              <th>Trail</th>
+              <th>Signal</th>
+            </tr>
+          </thead>
+          <tbody id="holdings-body">
+            <tr><td colspan="7" class="empty-state">No holdings</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Decision Timeline -->
+    <div class="card">
+      <h2>Decision Timeline</h2>
+      <div class="timeline" id="timeline">
+        <div class="empty-state">No decisions yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+const STOCK_NAMES = {
+  '069500':'KODEX 200', '091160':'KODEX 반도체', '091170':'KODEX 은행', '091180':'KODEX 자동차',
+  '102110':'TIGER 200', '102780':'KODEX 삼성그룹', '102970':'KODEX 증권',
+  '114800':'KODEX 인버스', '117460':'KODEX 에너지화학', '117680':'KODEX 철강',
+  '117700':'KODEX 건설', '122630':'KODEX 레버리지', '123310':'TIGER 인버스',
+  '123320':'TIGER 레버리지', '130680':'TIGER 원유선물Enhanced(H)',
+  '132030':'KODEX 골드선물(H)', '133690':'TIGER 미국나스닥100', '139260':'TIGER 200 IT',
+  '305720':'KODEX 2차전지산업'
+};
+let pipeId = null;  // mirinae pipe id (auto-detected)
+
+// ── Find the mirinae pipe ──
+function findMirinaePipe(pipes) {
+  // match by name containing 'mirinae' or 'Mirinae' or pipe with a specific known id
+  return (pipes || []).find(p =>
+    /mirinae|미리내/i.test(p.name)
+  );
+}
+
+// ── Init ──
+async function init() {
+  try {
+    const [pipesRes, decisionsRes, tradesRes] = await Promise.all([
+      fetch(API + '/api/pipes').then(r => r.json()),
+      fetch(API + '/api/decisions?count=20').then(r => r.json()).catch(() => ({ decisions: [] })),
+      fetch(API + '/api/trades?count=20').then(r => r.json()).catch(() => ({ trades: [] })),
+    ]);
+
+    const pipe = findMirinaePipe(pipesRes.pipes);
+    if (pipe) {
+      pipeId = pipe.id;
+      renderStatus(pipe);
+      renderPortfolio(pipe);
+      renderHoldings(pipe);
+      renderPerformance(pipe, tradesRes.trades || []);
+      // fetch bot status for AI state
+      fetchBotStatus(pipe);
+    } else {
+      document.getElementById('status-badge').textContent = 'NOT FOUND';
+      document.getElementById('status-badge').className = 'badge stopped';
+    }
+
+    renderDecisions(decisionsRes.decisions || []);
+    renderTimeline(decisionsRes.decisions || []);
+
+    // 최신 판단의 criteria 렌더링
+    const latestDecision = (decisionsRes.decisions || []).find(d =>
+      (d.action_taken || '').includes(MIRINAE_BOT_ID) && d.output_summary
+    );
+    if (latestDecision) {
+      try {
+        // output_summary에서 JSON 파싱 시도
+        const match = latestDecision.output_summary.match(/\{[\s\S]*criteria[\s\S]*\}/);
+        if (match) renderCriteria(JSON.parse(match[0]));
+      } catch(e2) {}
+    }
+
+    // 게시판에서 최신 criteria가 포함된 판단 찾기
+    if (!latestDecision) {
+      const posts = (await fetch(`/api/board?pipe_id=${pipe.id}&limit=10`).then(r=>r.json()).catch(()=>({posts:[]}))).posts || [];
+      const myPost = posts.find(p => p.bot_id === MIRINAE_BOT_ID && p.content.includes('criteria'));
+      if (myPost) {
+        try { renderCriteria(JSON.parse(myPost.extra || '{}')); } catch(e3) {}
+      }
+    }
+  } catch (e) {
+    console.error('init error:', e);
+  }
+}
+
+// ── Render Status ──
+function renderStatus(pipe) {
+  const badge = document.getElementById('status-badge');
+  if (pipe.active) {
+    badge.textContent = 'RUNNING';
+    badge.className = 'badge running';
+  } else {
+    badge.textContent = 'STOPPED';
+    badge.className = 'badge stopped';
+  }
+}
+
+// ── Render Portfolio Card ──
+function renderPortfolio(pipe) {
+  const holdings = pipe.holdings || [];
+  const budget = pipe.budget || 0;
+  const cash = pipe.cash || 0;
+  const invested = budget - cash;
+  const usage = budget > 0 ? ((invested / budget) * 100).toFixed(1) : '0';
+
+  // eval pnl from holdings
+  let evalPnl = 0;
+  holdings.forEach(h => { evalPnl += (h.eval_pnl || 0); });
+
+  document.getElementById('s-holdings').textContent = holdings.length + ' stocks';
+  const evalEl = document.getElementById('s-eval-pnl');
+  evalEl.textContent = (evalPnl >= 0 ? '+' : '') + evalPnl.toLocaleString() + ' won';
+  evalEl.className = 'value ' + (evalPnl >= 0 ? 'pos' : 'neg');
+
+  document.getElementById('s-budget').textContent = budget.toLocaleString() + ' won';
+  document.getElementById('s-usage').textContent = usage + '%';
+}
+
+// ── Render Performance Card ──
+function renderPerformance(pipe, trades) {
+  const pnl = pipe.realized_pnl || 0;
+  const tradeCount = pipe.trade_count || 0;
+  const profitRate = pipe.profit_rate || 0;
+
+  // calculate win rate from trades for this pipe
+  const pipeTrades = pipeId ? trades.filter(t => t.strategy_id === pipeId || t.source === pipeId) : trades;
+  const sells = pipeTrades.filter(t => t.action === 'sell' || t.side === 'sell');
+  const wins = sells.filter(t => (t.pnl || t.profit || 0) > 0);
+  const winRate = sells.length > 0 ? ((wins.length / sells.length) * 100).toFixed(0) : '--';
+
+  document.getElementById('s-trades').textContent = tradeCount;
+  document.getElementById('s-winrate').textContent = winRate === '--' ? '--' : winRate + '%';
+
+  const realEl = document.getElementById('s-realized');
+  realEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' won';
+  realEl.className = 'value ' + (pnl >= 0 ? 'pos' : 'neg');
+
+  const retEl = document.getElementById('s-return');
+  retEl.textContent = (profitRate >= 0 ? '+' : '') + profitRate.toFixed(2) + '%';
+  retEl.className = 'value ' + (profitRate >= 0 ? 'pos' : 'neg');
+}
+
+// ── Fetch Bot Status for AI card ──
+async function fetchBotStatus(pipe) {
+  try {
+    const bots = pipe.bots || [];
+    for (const b of bots) {
+      const res = await fetch(API + `/api/pipes/${pipe.id}/bot-status?bot_id=${b.bot_id}`).then(r => r.json()).catch(() => null);
+      if (res) {
+        updateAIStatus(res);
+        updateDebate(res);
+      }
+    }
+  } catch (e) {
+    console.error('bot status error:', e);
+  }
+}
+
+// ── AI Status Card ──
+function updateAIStatus(botStatus) {
+  const gen = botStatus.generation || botStatus.scan_count || 0;
+  const lastDecision = botStatus.last_decision || botStatus.last_action || '--';
+  const confidence = botStatus.confidence || botStatus.avg_confidence;
+  const scans = botStatus.scan_count || 0;
+
+  document.getElementById('s-gen').textContent = gen;
+  document.getElementById('s-last-decision').textContent = lastDecision;
+  document.getElementById('s-confidence').textContent = confidence != null ? (confidence * 100).toFixed(0) + '%' : '--';
+  document.getElementById('s-scans').textContent = scans;
+
+  // last analysis time
+  if (botStatus.last_scan_time || botStatus.updated_at) {
+    const t = botStatus.last_scan_time || botStatus.updated_at;
+    document.getElementById('last-analysis').textContent = 'Last: ' + formatTime(t);
+  }
+}
+
+// ── Debate Panel ──
+function updateDebate(botStatus) {
+  // If the bot provides debate/agent data, render it
+  const debate = botStatus.debate || botStatus.agents || null;
+  if (!debate) {
+    // fallback: show bot's latest analysis as trader opinion
+    if (botStatus.last_reason || botStatus.reason) {
+      document.getElementById('trader-opinion').textContent = botStatus.last_reason || botStatus.reason || '';
+    }
+    return;
+  }
+
+  // Bull agent
+  if (debate.bull) {
+    document.getElementById('bull-opinion').textContent = debate.bull.opinion || '';
+    renderReasons('bull-reasons', debate.bull.reasons || []);
+    renderPicks('bull', debate.bull.picks || []);
+  }
+
+  // Bear agent
+  if (debate.bear) {
+    document.getElementById('bear-opinion').textContent = debate.bear.opinion || '';
+    renderReasons('bear-reasons', debate.bear.reasons || []);
+    renderPicks('bear', debate.bear.picks || []);
+  }
+
+  // Trader
+  if (debate.trader) {
+    document.getElementById('trader-opinion').textContent = debate.trader.opinion || '';
+    renderReasons('trader-reasons', debate.trader.reasons || []);
+    renderPicks('trader', debate.trader.picks || []);
+  }
+}
+
+function renderReasons(elId, reasons) {
+  const el = document.getElementById(elId);
+  el.innerHTML = reasons.map(r => `<li>${escHtml(r)}</li>`).join('');
+}
+
+function renderPicks(agent, picks) {
+  const wrap = document.getElementById(agent + '-picks-wrap');
+  const el = document.getElementById(agent + '-picks');
+  if (!picks.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  el.innerHTML = picks.map(p => `<span class="pick-chip">${escHtml(typeof p === 'string' ? p : p.name || p.code || '')}</span>`).join('');
+}
+
+// ── Criteria Chart ──
+function renderCriteria(decision) {
+  const el = document.getElementById('criteria-chart');
+  if (!decision || !decision.criteria) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">분석 결과에 criteria 없음</div>';
+    return;
+  }
+  const c = decision.criteria;
+  const labels = {
+    market_trend: '시장 추세',
+    volume_signal: '거래량',
+    news_sentiment: '뉴스 감성',
+    time_risk: '시간 여유',
+    entry_price: '진입 가격',
+  };
+  let html = '';
+  for (const [key, label] of Object.entries(labels)) {
+    const item = c[key] || {};
+    const score = item.score || 0;
+    const detail = item.detail || '';
+    const pct = score * 10;
+    const color = score >= 7 ? 'var(--green)' : score >= 4 ? 'var(--yellow)' : 'var(--red)';
+    html += `<div class="criteria-row">
+      <span class="criteria-label">${label}</span>
+      <div class="criteria-bar-bg">
+        <div class="criteria-bar" style="width:${pct}%;background:${color}">${score}/10</div>
+      </div>
+      <span class="criteria-detail" title="${escHtml(detail)}">${escHtml(detail)}</span>
+    </div>`;
+  }
+  // 종합 confidence
+  if (decision.confidence != null) {
+    const conf = decision.confidence;
+    const confPct = conf * 100;
+    const confColor = conf >= 0.7 ? 'var(--green)' : conf >= 0.5 ? 'var(--yellow)' : 'var(--red)';
+    html += `<div class="criteria-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+      <span class="criteria-label" style="font-weight:700">종합 확신</span>
+      <div class="criteria-bar-bg">
+        <div class="criteria-bar" style="width:${confPct}%;background:${confColor}">${(conf*100).toFixed(0)}%</div>
+      </div>
+      <span class="criteria-detail" style="font-weight:700">${decision.decision || 'HOLD'}</span>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── Holdings Table ──
+function renderHoldings(pipe) {
+  const holdings = pipe.holdings || [];
+  const tbody = document.getElementById('holdings-body');
+  if (!holdings.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No holdings</td></tr>';
+    return;
+  }
+  tbody.innerHTML = holdings.map(h => {
+    const pnlPct = h.pnl_pct || h.profit_rate || 0;
+    const pnlCls = pnlPct >= 0 ? 'pos' : 'neg';
+    const trailPct = h.trailing_pct || 0;
+    const signal = h.signal || h.last_signal || '--';
+    return `<tr>
+      <td><strong>${escHtml(h.stock_name || h.code || '')}</strong><br><span style="color:var(--muted);font-size:11px">${h.code || ''}</span></td>
+      <td class="num">${(h.qty || h.quantity || 0).toLocaleString()}</td>
+      <td class="num">${(h.avg_price || 0).toLocaleString()}</td>
+      <td class="num">${(h.current_price || h.price || 0).toLocaleString()}</td>
+      <td class="num" style="color:var(--${pnlCls})">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%</td>
+      <td><div class="trailing-bar"><div class="trailing-fill" style="width:${Math.min(100, Math.abs(trailPct))}%"></div></div> <span style="font-size:11px;color:var(--muted)">${trailPct.toFixed(1)}%</span></td>
+      <td><span style="font-size:11px">${escHtml(signal)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Decision Timeline ──
+function renderTimeline(decisions) {
+  const el = document.getElementById('timeline');
+  if (!decisions.length) {
+    el.innerHTML = '<div class="empty-state">No decisions yet</div>';
+    return;
+  }
+  // filter to mirinae pipe if possible
+  const filtered = pipeId ? decisions.filter(d => d.strategy_id === pipeId || !d.strategy_id) : decisions;
+  const items = (filtered.length ? filtered : decisions).slice(0, 20);
+
+  el.innerHTML = items.map(d => {
+    const action = (d.action || d.decision || 'HOLD').toUpperCase();
+    const badgeCls = action.includes('BUY') ? 'BUY' : action.includes('SELL') ? 'SELL' : 'HOLD';
+    const conf = d.confidence != null ? `conf: ${(d.confidence * 100).toFixed(0)}%` : '';
+    return `<div class="timeline-item">
+      <span class="timeline-time">${formatTime(d.created_at || d.timestamp || '')}</span>
+      <span class="timeline-badge ${badgeCls}">${escHtml(action)}</span>
+      <div class="timeline-body">
+        <span class="timeline-stock">${escHtml(stockLabel(d.stock_code, d.stock_name))}</span>
+        <span class="timeline-confidence">${conf}</span>
+        <div class="timeline-reason collapsed" onclick="toggleReason(event)">${escHtml(d.reason || d.summary || '')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Also render AI decisions into the debate panel ──
+function renderDecisions(decisions) {
+  if (!decisions.length) return;
+  // Use the latest decision for trader panel if no debate data
+  const latest = decisions[0];
+  if (latest && document.getElementById('trader-opinion').textContent === 'Waiting for decision...') {
+    const action = (latest.action || latest.decision || '').toUpperCase();
+    const conf = latest.confidence != null ? ` (confidence: ${(latest.confidence * 100).toFixed(0)}%)` : '';
+    document.getElementById('trader-opinion').textContent =
+      `${stockLabel(latest.stock_code, latest.stock_name)}: ${action}${conf}`;
+    if (latest.reason) {
+      renderReasons('trader-reasons', [latest.reason]);
+    }
+  }
+}
+
+// ── SSE ──
+function connectSSE() {
+  const sse = new EventSource(API + '/api/events');
+
+  sse.addEventListener('bot_trade', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      // refresh on trade event
+      init();
+    } catch (err) {}
+  });
+
+  sse.addEventListener('pipe_status', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.pipe_id === pipeId || !pipeId) {
+        init();
+      }
+    } catch (err) {}
+  });
+
+  sse.addEventListener('bot_decision', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.debate) {
+        updateDebate(data);
+      }
+      init();
+    } catch (err) {}
+  });
+
+  sse.onerror = () => {
+    setTimeout(connectSSE, 5000);
+    sse.close();
+  };
+}
+
+// ── Helpers ──
+function formatTime(ts) {
+  if (!ts) return '--';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  } catch { return ts; }
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function stockLabel(code, name = '') {
+  const c = String(code || '').trim();
+  if (!c) return name || '';
+  const n = name || STOCK_NAMES[c] || '';
+  return n ? `${n} (${c})` : c;
+}
+
+function toggleReason(ev) {
+  ev.stopPropagation();
+  ev.currentTarget.classList.toggle('collapsed');
+  ev.currentTarget.classList.toggle('expanded');
+}
+
+// ── 수동 판단 요청 ──
+async function manualJudge() {
+  const btn = document.getElementById('judgeBtn');
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ 분석 중...';
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+
+  try {
+    const botId = MIRINAE_BOT_ID || 'mirinae';
+    const r = await fetch(`/api/bots/${botId}/judge`, { method: 'POST' });
+    const d = await r.json();
+
+    if (d.success && d.decision) {
+      const dec = d.decision;
+      const conf = (dec.confidence || 0).toFixed(2);
+      const action = dec.decision || 'HOLD';
+      const reason = dec.trader_reason || dec.detail || '';
+
+      alert(`[${action}] confidence: ${conf}\n\n${reason}`);
+
+      // 즉시 UI 갱신
+      init();
+    } else {
+      alert('판단 실패: ' + (d.error || 'AI 응답 없음'));
+    }
+  } catch (e) {
+    alert('요청 실패: ' + e.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+
+// 현재 봇 ID 감지 (mirinae 또는 mirinae-2)
+const MIRINAE_BOT_ID = 'mirinae-2';
+
+// ── Auto-refresh every 30s ──
+setInterval(init, 30000);
+
+// ── Start ──
+init();
+connectSSE();
+</script>
+</body>
+</html>

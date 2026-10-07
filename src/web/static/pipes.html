@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - Pipes</title>
+<style>
+  :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; --pipes-width:220px; --bot-width:350px; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; height:100vh; overflow:hidden; }
+  a { color:var(--accent); text-decoration:none; }
+
+  /* ── Layout ── */
+  .app { display:flex; flex-direction:column; height:100vh; }
+  header { display:flex; align-items:center; gap:16px; padding:10px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  header h1 { font-size:18px; }
+  header nav { margin-left:auto; }
+  header nav a { font-size:13px; margin-left:12px; }
+  .layout-reset { margin-left:12px; width:26px; height:24px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:var(--muted); cursor:pointer; font-size:13px; line-height:1; vertical-align:middle; }
+  .layout-reset:hover { border-color:var(--accent); color:var(--accent); }
+
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* ── Column 1: Pipe List ── */
+  .col-pipes { width:var(--pipes-width); min-width:180px; border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; flex-shrink:0; }
+  .col-pipes .budget-summary { padding:10px 12px; border-bottom:1px solid var(--border); font-size:11px; }
+  .col-pipes .budget-summary .budget-row { display:flex; justify-content:space-between; margin-bottom:2px; }
+  .col-pipes .budget-summary .budget-row b { color:var(--accent); }
+  .col-pipes .budget-summary .bar { height:4px; background:var(--border); border-radius:2px; margin-top:4px; }
+  .col-pipes .budget-summary .bar-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .3s; }
+  .col-pipes .budget-edit { display:flex; gap:4px; margin-top:6px; }
+  .col-pipes .budget-edit input { flex:1; width:0; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:2px 6px; border-radius:3px; font-size:11px; }
+  .col-pipes .budget-edit button { background:var(--accent); color:#fff; border:none; padding:2px 8px; border-radius:3px; font-size:10px; cursor:pointer; }
+
+  .pipe-list { flex:1; overflow-y:auto; padding:6px 0; }
+  .pipe-item { padding:8px 12px; cursor:pointer; border-left:3px solid transparent; transition:background .15s; }
+  .pipe-item:hover { background:rgba(88,166,255,.06); }
+  .pipe-item.selected { background:rgba(88,166,255,.1); border-left-color:var(--accent); }
+  .pipe-item .pi-name { font-size:13px; font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:6px; }
+  .pipe-item .pi-status { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .pipe-item .pi-status.on { background:var(--green); }
+  .pipe-item .pi-status.off { background:var(--muted); }
+  .pipe-item .pi-meta { font-size:11px; color:var(--muted); }
+  .pipe-item .pi-pnl { font-size:11px; font-weight:600; }
+
+  .pipe-add { padding:8px 12px; border-top:1px solid var(--border); }
+  .pipe-add button { width:100%; background:var(--surface); border:1px dashed var(--border); color:var(--accent); padding:6px; border-radius:5px; font-size:12px; cursor:pointer; }
+  .pipe-add button:hover { border-color:var(--accent); }
+
+  /* ── Column 2: Pipe Detail ── */
+  .col-detail { flex:1; overflow-y:auto; padding:16px 20px; min-width:0; }
+  .col-detail .empty-state { display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); font-size:14px; }
+  .resize-handle { width:7px; flex:0 0 7px; cursor:col-resize; position:relative; background:transparent; touch-action:none; }
+  .resize-handle.hidden { display:none; }
+  .resize-handle::after { content:''; position:absolute; top:0; bottom:0; left:3px; width:1px; background:var(--border); }
+  .resize-handle:hover,
+  .resize-handle.active { background:rgba(88,166,255,.08); }
+  .resize-handle:hover::after,
+  .resize-handle.active::after { background:var(--accent); }
+  body.resizing { cursor:col-resize; user-select:none; }
+
+  .detail-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .detail-header h2 { font-size:18px; flex:1; }
+  .detail-header .toggle { width:44px; height:24px; border-radius:12px; background:var(--border); cursor:pointer; position:relative; transition:background .2s; flex-shrink:0; }
+  .detail-header .toggle.on { background:var(--green); }
+  .detail-header .toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .2s; }
+  .detail-header .toggle.on::after { transform:translateX(20px); }
+  .detail-header .btn-del { background:none; border:1px solid var(--red); color:var(--red); padding:3px 10px; border-radius:4px; font-size:11px; cursor:pointer; }
+  .detail-header .btn-del:hover { background:var(--red); color:#fff; }
+
+  .detail-stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin-bottom:16px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 12px; }
+  .stat-card .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .stat-card .val { font-size:16px; font-weight:700; margin-top:2px; }
+  .stat-card .val.edit { display:flex; align-items:center; gap:4px; }
+  .stat-card .val.edit input { width:80px; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:2px 6px; border-radius:3px; font-size:14px; font-weight:700; }
+
+  .pnl-pos { color:var(--green); }
+  .pnl-neg { color:var(--red); }
+
+  /* Section headers */
+  .section-title { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+  .section-title .badge { background:var(--accent); color:#fff; font-size:9px; padding:1px 5px; border-radius:3px; font-weight:700; }
+
+  /* Holdings table */
+  .holdings-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px; }
+  .holdings-table th { text-align:left; padding:6px 8px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); font-size:11px; }
+  .holdings-table td { padding:6px 8px; border-bottom:1px solid rgba(48,54,61,.2); }
+  .holdings-table .total-row { font-weight:700; border-top:2px solid var(--border); }
+  .holdings-table .empty-msg { color:var(--muted); text-align:center; padding:16px; }
+  .holdings-table td.right { text-align:right; }
+  .holdings-table th.right { text-align:right; }
+
+  /* Bot list in pipe detail */
+  .bot-list-section { margin-bottom:20px; }
+  .bot-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-bottom:4px; transition:border-color .15s; cursor:default; }
+  .bot-row:hover { border-color:rgba(88,166,255,.3); }
+  .bot-row.selected { border-color:var(--accent); background:rgba(88,166,255,.08); }
+  .bot-toggle { width:14px; height:14px; border-radius:50%; cursor:pointer; flex-shrink:0; border:2px solid var(--border); }
+  .bot-toggle.on { background:var(--green); border-color:var(--green); }
+  .bot-toggle.off { background:var(--red); border-color:var(--red); opacity:.6; }
+  .bot-name { font-size:13px; font-weight:600; color:var(--accent); cursor:pointer; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bot-name:hover { text-decoration:underline; }
+  .bot-ui-link { font-size:10px; color:var(--accent); cursor:pointer; text-decoration:none; padding:1px 5px; border:1px solid var(--accent); border-radius:3px; flex-shrink:0; }
+  .bot-ui-link:hover { background:var(--accent); color:#fff; }
+  .bot-ratio-ctrl { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  .bot-ratio-ctrl input[type=range] { width:70px; accent-color:var(--accent); }
+  .bot-ratio-ctrl .ratio-label { width:32px; text-align:right; font-weight:600; font-size:12px; }
+  .bot-ratio-ctrl .budget-label { width:70px; text-align:right; color:var(--muted); font-size:11px; }
+  .bot-remove { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:0 4px; }
+  .bot-remove:hover { color:var(--red); }
+
+  .bot-add-row { margin-top:6px; }
+  .bot-add-row select { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:5px; font-size:12px; }
+
+  /* Board */
+  .board-section { margin-top:16px; }
+  .board-header { display:flex; align-items:center; cursor:pointer; padding:6px 0; }
+  .board-header:hover { opacity:.8; }
+  .board-header .arrow { font-size:10px; color:var(--muted); margin-left:6px; }
+  .board-content { max-height:250px; overflow-y:auto; }
+  .board-filter { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; }
+  .board-filter button { font-size:10px; padding:2px 8px; border:1px solid var(--border); border-radius:3px; background:var(--bg); color:var(--text); cursor:pointer; }
+  .board-filter button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .board-post { padding:3px 0; border-bottom:1px solid rgba(48,54,61,.1); font-size:11px; display:flex; gap:6px; }
+  .board-post .bp-time { color:var(--muted); flex-shrink:0; width:36px; }
+  .board-post .bp-bot { color:var(--accent); flex-shrink:0; width:50px; overflow:hidden; text-overflow:ellipsis; font-weight:600; }
+  .board-post .bp-type { flex-shrink:0; width:14px; }
+  .board-post .bp-msg { flex:1; min-width:0; }
+  .expandable-text { cursor:pointer; display:block; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.35; }
+  .expandable-text.collapsed { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .expandable-text.expanded { white-space:pre-wrap; overflow:visible; background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.18); border-radius:5px; padding:5px 6px; margin-top:2px; }
+  .expandable-text::after { content:'  클릭해 펼치기'; color:var(--accent); font-size:10px; opacity:.75; }
+  .expandable-text.expanded::after { content:'  접기'; }
+
+  /* ── Column 3: Bot Detail ── */
+  .col-bot { width:var(--bot-width); min-width:280px; border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; flex-shrink:0; }
+  .col-bot.hidden { display:none; }
+  .col-bot .bot-header { padding:12px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+  .col-bot .bot-header .bot-h-name { font-size:15px; font-weight:700; color:var(--accent); flex:1; }
+  .col-bot .bot-header .bot-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+  .col-bot .bot-header .bot-badge.running { background:rgba(63,185,80,.15); color:var(--green); }
+  .col-bot .bot-header .bot-badge.stopped { background:rgba(248,81,73,.15); color:var(--red); }
+  .col-bot .bot-header .close-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; padding:0 4px; }
+  .col-bot .bot-header .close-btn:hover { color:var(--text); }
+  .col-bot .bot-body { flex:1; overflow-y:auto; padding:12px 14px; }
+
+  .bot-info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:14px; }
+  .bot-info-card { background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:6px 8px; }
+  .bot-info-card .lbl { font-size:10px; color:var(--muted); }
+  .bot-info-card .val { font-size:14px; font-weight:700; margin-top:1px; }
+  .bot-info-card.full { grid-column:span 2; }
+
+  /* Bot holdings */
+  .bot-holdings { margin-bottom:14px; }
+  .bot-holdings table { width:100%; border-collapse:collapse; font-size:11px; }
+  .bot-holdings th { text-align:left; padding:3px 4px; color:var(--muted); border-bottom:1px solid var(--border); }
+  .bot-holdings td { padding:3px 4px; border-bottom:1px solid rgba(48,54,61,.2); }
+  .position-reports { margin-bottom:14px; }
+  .position-report { background:var(--bg); border:1px solid var(--border); border-radius:6px; margin-bottom:6px; }
+  .position-report summary { cursor:pointer; padding:7px 9px; font-size:12px; color:var(--accent); font-weight:600; }
+  .position-report-body { padding:0 9px 9px; }
+  .position-report-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+  .position-report-metric { background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:6px 7px; }
+  .position-report-metric .lbl { color:var(--muted); font-size:10px; }
+  .position-report-metric .val { font-size:12px; font-weight:700; margin-top:1px; }
+  .position-report-text { font-size:11px; color:var(--muted); margin-top:5px; }
+
+  /* Bot decisions */
+  .bot-decisions { margin-bottom:14px; }
+  .bot-decisions table { width:100%; border-collapse:collapse; font-size:11px; }
+  .bot-decisions th { text-align:left; padding:3px 4px; color:var(--muted); border-bottom:1px solid var(--border); }
+  .bot-decisions td { padding:3px 4px; border-bottom:1px solid rgba(48,54,61,.2); }
+
+  /* Bot board */
+  .bot-board { margin-bottom:14px; }
+
+  /* Bot UI Spec widgets */
+  .bot-widget-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+  .w-1x1 { grid-column:span 1; }
+  .w-2x1 { grid-column:span 2; }
+  .bot-stat { background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:6px 8px; }
+  .bot-stat .lbl { font-size:10px; color:var(--muted); }
+  .bot-stat .val { font-size:14px; font-weight:700; margin-top:1px; }
+  .bot-text { background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:5px 8px; font-size:12px; }
+  .bot-table { width:100%; border-collapse:collapse; font-size:11px; }
+  .bot-table th { text-align:left; color:var(--muted); padding:3px 4px; border-bottom:1px solid var(--border); }
+  .bot-table td { padding:3px 4px; border-bottom:1px solid rgba(48,54,61,.2); }
+  .bot-list-widget { font-size:11px; color:var(--muted); max-height:120px; overflow-y:auto; }
+  .bot-list-widget li { border-bottom:1px solid rgba(48,54,61,.2); padding:4px 0; list-style:none; }
+  .blocked-reason { color:var(--red); white-space:normal; font-size:10px; margin-top:2px; line-height:1.35; }
+  .exec-detail { color:var(--muted); white-space:normal; font-size:10px; margin-top:2px; line-height:1.35; }
+
+  /* ── Modal ── */
+  .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center; }
+  .modal-bg.open { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; width:90%; max-width:400px; }
+  .modal h3 { margin-bottom:12px; font-size:16px; }
+  .modal label { font-size:12px; color:var(--muted); display:block; margin-bottom:2px; }
+  .modal input, .modal select { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:5px; font-size:13px; margin-bottom:10px; }
+  .modal .actions { display:flex; gap:8px; }
+  .modal .actions button { flex:1; padding:8px; border:none; border-radius:5px; font-size:13px; cursor:pointer; color:#fff; }
+
+  /* ── Responsive ── */
+  @media (max-width:768px) {
+    .main { flex-direction:column; }
+    .col-pipes { width:100%; border-right:none; border-bottom:1px solid var(--border); max-height:180px; }
+    .col-bot { width:100%; border-left:none; border-top:1px solid var(--border); max-height:45vh; }
+    .col-bot.hidden { display:none; }
+    .resize-handle { display:none; }
+    .detail-stats { grid-template-columns:repeat(3,1fr); }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Pipes</h1>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/bots">Bots</a>
+      <a href="/trades">Trades</a>
+      <a href="/news">News</a>
+      <a href="/logs">Logs</a>
+      <button class="layout-reset" onclick="resetPaneLayout()" title="패널 폭 초기화" aria-label="패널 폭 초기화">↔</button>
+    </nav>
+  </header>
+
+  <div class="main">
+    <!-- Column 1: Pipe List -->
+    <div class="col-pipes">
+      <div class="budget-summary" id="budgetSummary">
+        <div class="budget-row"><span>Total</span><b id="bTotal">0</b></div>
+        <div class="budget-row"><span>Allocated</span><span id="bAlloc">0</span></div>
+        <div class="budget-row"><span>Free</span><span id="bFree">0</span></div>
+        <div class="bar"><div class="bar-fill" id="budgetBar"></div></div>
+        <div class="budget-edit">
+          <input type="number" id="totalBudgetInput" placeholder="total">
+          <button onclick="saveBudget()">Set</button>
+        </div>
+      </div>
+      <div class="pipe-list" id="pipeList"></div>
+      <div class="pipe-add">
+        <button onclick="openCreate()">+ New Pipe</button>
+      </div>
+    </div>
+    <div class="resize-handle" data-resize="pipes" title="파이프 패널 폭 조절" role="separator" aria-orientation="vertical" aria-label="파이프 패널 폭 조절"></div>
+
+    <!-- Column 2: Pipe Detail -->
+    <div class="col-detail" id="colDetail">
+      <div class="empty-state" id="detailEmpty">파이프를 선택하세요</div>
+      <div id="detailContent" style="display:none"></div>
+    </div>
+
+    <!-- Column 3: Bot Detail -->
+    <div class="resize-handle hidden" id="botResizeHandle" data-resize="bot" title="봇 상세 패널 폭 조절" role="separator" aria-orientation="vertical" aria-label="봇 상세 패널 폭 조절"></div>
+    <div class="col-bot hidden" id="colBot">
+      <div class="bot-header">
+        <span class="bot-h-name" id="botHName"></span>
+        <span class="bot-badge" id="botHBadge"></span>
+        <button class="close-btn" onclick="closeBotPanel()">&times;</button>
+      </div>
+      <div class="bot-body" id="botBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div class="modal-bg" id="createModal">
+  <div class="modal">
+    <h3>New Pipe</h3>
+    <label>Name</label>
+    <input id="cName" placeholder="ETF aggressive">
+    <label>Budget (won)</label>
+    <input id="cBudget" type="number" value="50000">
+    <label>Initial Bot</label>
+    <select id="cBot"><option value="">None</option></select>
+    <div class="actions">
+      <button style="background:var(--green)" onclick="doCreate()">Create</button>
+      <button style="background:var(--border)" onclick="closeCreate()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+const STOCK_NAMES = {
+  '069500':'KODEX 200', '091160':'KODEX 반도체', '091170':'KODEX 은행', '091180':'KODEX 자동차',
+  '102110':'TIGER 200', '102780':'KODEX 삼성그룹', '102970':'KODEX 증권',
+  '114800':'KODEX 인버스', '117460':'KODEX 에너지화학', '117680':'KODEX 철강',
+  '117700':'KODEX 건설', '122630':'KODEX 레버리지', '123310':'TIGER 인버스',
+  '123320':'TIGER 레버리지', '130680':'TIGER 원유선물Enhanced(H)',
+  '132030':'KODEX 골드선물(H)', '133690':'TIGER 미국나스닥100', '139260':'TIGER 200 IT',
+  '305720':'KODEX 2차전지산업'
+};
+let allBots = [];
+let allPipes = [];
+let selectedPipeId = null;
+let selectedBotId = null;  // bot selected in col3
+let _boardOpen = {};
+let _boardFilter = {};
+let _boardFilterBot = {};  // for col3 bot board
+const LAYOUT_KEY = 'pipes.layout.widths';
+const DEFAULT_LAYOUT = { pipes: 220, bot: 350 };
+const PANE_LIMITS = {
+  pipes: { min: 180, max: 420 },
+  bot: { min: 280, max: 620 },
+  centerMin: 420,
+};
+let resizeState = null;
+
+// ── BOT UI PAGE LINKS ──
+const BOT_UI_PAGES = {
+  'mirinae': '/mirinae',
+  'mirinae-2': '/mirinae2',
+  'bot-designer': '/bot-designer',
+};
+
+// ── RESIZABLE 3-PANE LAYOUT ──
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function readSavedLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
+    return {
+      pipes: Number(saved.pipes) || DEFAULT_LAYOUT.pipes,
+      bot: Number(saved.bot) || DEFAULT_LAYOUT.bot,
+    };
+  } catch (e) {
+    return { ...DEFAULT_LAYOUT };
+  }
+}
+
+function paneVisible(kind) {
+  if (kind !== 'bot') return true;
+  const col = document.getElementById('colBot');
+  return !!col && !col.classList.contains('hidden');
+}
+
+function currentPaneWidth(kind) {
+  const selector = kind === 'pipes' ? '.col-pipes' : '#colBot';
+  const el = document.querySelector(selector);
+  if (!el) return DEFAULT_LAYOUT[kind];
+  if (kind === 'bot' && !paneVisible('bot')) {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bot-width')) || DEFAULT_LAYOUT.bot;
+  }
+  return el.getBoundingClientRect().width || DEFAULT_LAYOUT[kind];
+}
+
+function maxPaneWidth(kind) {
+  const main = document.querySelector('.main');
+  const mainWidth = main ? main.getBoundingClientRect().width : window.innerWidth;
+  const botOpen = paneVisible('bot');
+  const otherWidth = kind === 'pipes' ? (botOpen ? currentPaneWidth('bot') : 0) : currentPaneWidth('pipes');
+  const handleWidth = botOpen ? 14 : 7;
+  const centerMin = Math.min(PANE_LIMITS.centerMin, Math.max(240, mainWidth * 0.35));
+  const roomForPane = mainWidth - otherWidth - centerMin - handleWidth;
+  return Math.max(PANE_LIMITS[kind].min, Math.min(PANE_LIMITS[kind].max, roomForPane));
+}
+
+function setPaneWidth(kind, px, persist = true) {
+  const width = clamp(Math.round(px), PANE_LIMITS[kind].min, maxPaneWidth(kind));
+  document.documentElement.style.setProperty(`--${kind}-width`, `${width}px`);
+  if (persist) savePaneLayout();
+}
+
+function savePaneLayout() {
+  const layout = {
+    pipes: Math.round(currentPaneWidth('pipes')),
+    bot: Math.round(currentPaneWidth('bot')),
+  };
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function applySavedLayout() {
+  const layout = readSavedLayout();
+  setPaneWidth('pipes', layout.pipes, false);
+  setPaneWidth('bot', layout.bot, false);
+}
+
+function resetPaneLayout() {
+  setPaneWidth('pipes', DEFAULT_LAYOUT.pipes, false);
+  setPaneWidth('bot', DEFAULT_LAYOUT.bot, false);
+  savePaneLayout();
+}
+
+function syncResizeHandles() {
+  const rightHandle = document.getElementById('botResizeHandle');
+  if (rightHandle) rightHandle.classList.toggle('hidden', !paneVisible('bot'));
+  setPaneWidth('pipes', currentPaneWidth('pipes'), false);
+  if (paneVisible('bot')) setPaneWidth('bot', currentPaneWidth('bot'), false);
+}
+
+function startPaneResize(ev) {
+  if (ev.button !== 0 || window.innerWidth <= 768) return;
+  const handle = ev.currentTarget;
+  const kind = handle.dataset.resize;
+  resizeState = { kind, handle, pointerId: ev.pointerId };
+  handle.classList.add('active');
+  document.body.classList.add('resizing');
+  handle.setPointerCapture(ev.pointerId);
+  window.addEventListener('pointermove', onPaneResize);
+  window.addEventListener('pointerup', stopPaneResize, { once: true });
+  window.addEventListener('pointercancel', stopPaneResize, { once: true });
+  ev.preventDefault();
+}
+
+function onPaneResize(ev) {
+  if (!resizeState) return;
+  const main = document.querySelector('.main');
+  if (!main) return;
+  const rect = main.getBoundingClientRect();
+  const width = resizeState.kind === 'pipes' ? ev.clientX - rect.left : rect.right - ev.clientX;
+  setPaneWidth(resizeState.kind, width, false);
+}
+
+function stopPaneResize(ev) {
+  if (!resizeState) return;
+  const { handle, pointerId } = resizeState;
+  handle.classList.remove('active');
+  document.body.classList.remove('resizing');
+  try { handle.releasePointerCapture(pointerId || ev.pointerId); } catch (e) { /* ignore */ }
+  window.removeEventListener('pointermove', onPaneResize);
+  window.removeEventListener('pointerup', stopPaneResize);
+  window.removeEventListener('pointercancel', stopPaneResize);
+  resizeState = null;
+  savePaneLayout();
+}
+
+function resizeByKeyboard(ev) {
+  if (!['ArrowLeft', 'ArrowRight'].includes(ev.key)) return;
+  const kind = ev.currentTarget.dataset.resize;
+  const step = ev.shiftKey ? 40 : 20;
+  const direction = ev.key === 'ArrowRight' ? 1 : -1;
+  const delta = kind === 'bot' ? -direction * step : direction * step;
+  setPaneWidth(kind, currentPaneWidth(kind) + delta);
+  ev.preventDefault();
+}
+
+function initResizeHandles() {
+  document.querySelectorAll('.resize-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', startPaneResize);
+    handle.addEventListener('keydown', resizeByKeyboard);
+    handle.tabIndex = 0;
+  });
+  window.addEventListener('resize', syncResizeHandles);
+  syncResizeHandles();
+}
+
+// ── LOAD ──
+async function load() {
+  const [pr, br] = await Promise.all([
+    fetch(API + '/api/pipes').then(r => r.json()),
+    fetch(API + '/api/bots').then(r => r.json())
+  ]);
+  allBots = br.bots || [];
+  allPipes = pr.pipes || [];
+  renderBudget(pr);
+  renderPipeList();
+  if (selectedPipeId) {
+    const pipe = allPipes.find(p => p.id === selectedPipeId);
+    if (pipe) renderPipeDetail(pipe);
+    else clearDetail();
+  }
+  updateCreateModal();
+}
+
+// ── BUDGET ──
+function renderBudget(d) {
+  document.getElementById('totalBudgetInput').value = d.total_budget;
+  document.getElementById('bTotal').textContent = d.total_budget.toLocaleString();
+  document.getElementById('bAlloc').textContent = d.allocated.toLocaleString();
+  document.getElementById('bFree').textContent = d.unallocated.toLocaleString();
+  const pct = d.total_budget > 0 ? (d.allocated / d.total_budget * 100) : 0;
+  document.getElementById('budgetBar').style.width = pct + '%';
+}
+
+async function saveBudget() {
+  const v = +document.getElementById('totalBudgetInput').value;
+  await fetch(API + '/api/pipes/budget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ total_budget: v }) });
+  load();
+}
+
+// ── PIPE LIST (Col 1) ──
+function renderPipeList() {
+  const el = document.getElementById('pipeList');
+  if (!allPipes.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">No pipes yet</div>';
+    return;
+  }
+  el.innerHTML = allPipes.map(p => {
+    const sel = p.id === selectedPipeId ? 'selected' : '';
+    const pnlCls = (p.realized_pnl || 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const pnlSign = (p.realized_pnl || 0) >= 0 ? '+' : '';
+    const runnerOn = p.runner_alive !== undefined ? !!p.runner_alive : !!p.active;
+    const runLabel = runnerOn ? 'RUN' : (p.active ? 'NEEDS START' : 'STOP');
+    return `<div class="pipe-item ${sel}" onclick="selectPipe('${p.id}')">
+      <div class="pi-name">
+        <span class="pi-status ${runnerOn ? 'on' : 'off'}"></span>
+        ${esc(p.name)}
+      </div>
+      <div class="pi-meta">${p.budget.toLocaleString()} / ${runLabel}</div>
+      <div class="pi-pnl ${pnlCls}">${pnlSign}${(p.realized_pnl || 0).toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectPipe(id) {
+  selectedPipeId = id;
+  selectedBotId = null;
+  closeBotPanel();
+  renderPipeList();
+  const pipe = allPipes.find(p => p.id === id);
+  if (pipe) renderPipeDetail(pipe);
+  // Load dynamic data
+  loadHoldings(id);
+  loadBoard(id);
+}
+
+function clearDetail() {
+  selectedPipeId = null;
+  document.getElementById('detailEmpty').style.display = '';
+  document.getElementById('detailContent').style.display = 'none';
+  renderPipeList();
+  closeBotPanel();
+}
+
+// ── PIPE DETAIL (Col 2) ──
+function renderPipeDetail(p) {
+  document.getElementById('detailEmpty').style.display = 'none';
+  const el = document.getElementById('detailContent');
+  el.style.display = '';
+
+  const pnlCls = (p.realized_pnl || 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+  const profCls = (p.profit_rate || 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+  const pnlSign = (p.realized_pnl || 0) >= 0 ? '+' : '';
+  const profSign = (p.profit_rate || 0) >= 0 ? '+' : '';
+  const runnerOn = p.runner_alive !== undefined ? !!p.runner_alive : !!p.active;
+  const runnerCls = runnerOn ? 'pnl-pos' : 'pnl-neg';
+  const runnerText = runnerOn ? `PID ${p.runner_pid || ''}` : (p.active ? 'Stopped' : 'Off');
+
+  const botOpts = allBots.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+  el.innerHTML = `
+    <div class="detail-header">
+      <h2>${esc(p.name)}</h2>
+      <div class="toggle ${runnerOn ? 'on' : ''}" onclick="togglePipe('${p.id}',${!runnerOn})" title="${runnerOn ? 'Stop' : 'Start'}"></div>
+      <button class="btn-del" onclick="if(confirm('Delete pipe?'))del('${p.id}')">Delete</button>
+    </div>
+
+    <div class="detail-stats">
+      <div class="stat-card">
+        <div class="lbl">Budget</div>
+        <div class="val edit"><input type="number" value="${p.budget}" onchange="up('${p.id}',{budget:+this.value})"></div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Cash</div>
+        <div class="val">${p.cash.toLocaleString()}</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">P&L</div>
+        <div class="val ${pnlCls}">${pnlSign}${(p.realized_pnl || 0).toLocaleString()}</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Return</div>
+        <div class="val ${profCls}">${profSign}${(p.profit_rate || 0).toFixed(2)}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Trades</div>
+        <div class="val">${p.trade_count}</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Runner</div>
+        <div class="val ${runnerCls}">${runnerText}</div>
+      </div>
+      <div class="stat-card" id="pipeTokenCard-${p.id}">
+        <div class="lbl">🔥 AI Tokens</div>
+        <div class="val">-</div>
+      </div>
+    </div>
+
+    <!-- Holdings -->
+    <div class="section-title">Holdings <span class="badge" id="holdingsCount">0</span></div>
+    <div id="holdingsArea" style="margin-bottom:20px">
+      <table class="holdings-table"><tbody><tr><td class="empty-msg" colspan="7">Loading...</td></tr></tbody></table>
+    </div>
+
+    <!-- Bots -->
+    <div class="section-title">Bots <span class="badge">${(p.bots || []).length}</span></div>
+    <div class="bot-list-section">
+      ${(p.bots || []).map(b => {
+        const isSel = b.bot_id === selectedBotId;
+        const uiLink = BOT_UI_PAGES[b.bot_id] ? `<a class="bot-ui-link" href="${BOT_UI_PAGES[b.bot_id]}" title="Open UI">UI</a>` : '';
+        return `<div class="bot-row ${isSel ? 'selected' : ''}" data-pipe="${p.id}" data-bot="${b.bot_id}">
+          <span class="bot-toggle ${b.enabled === false ? 'off' : 'on'}" title="${b.enabled === false ? 'Disabled' : 'Enabled'}" onclick="toggleBotEnabled('${p.id}','${b.bot_id}',${b.enabled === false})"></span>
+          <span class="bot-name" onclick="openBotPanel('${p.id}','${b.bot_id}')">${shortBot(b.bot_id)}</span>
+          ${uiLink}
+          <div class="bot-ratio-ctrl">
+            <input type="range" min="0" max="99" value="${Math.round(b.ratio * 100)}"
+              class="ratio-slider" data-pipe="${p.id}" data-bot="${b.bot_id}"
+              oninput="previewRatio(this)" onchange="commitRatio(this)">
+            <span class="ratio-label">${Math.round(b.ratio * 100)}%</span>
+            <span class="budget-label">${b.budget.toLocaleString()}</span>
+          </div>
+          <span class="bot-tokens" id="bt-${p.id}-${b.bot_id}" style="font-size:9px;color:var(--muted);min-width:45px;text-align:right"></span>
+          <button class="bot-remove" onclick="removeBot('${p.id}','${b.bot_id}')" title="Remove">&times;</button>
+        </div>`;
+      }).join('')}
+      <div class="bot-add-row">
+        <select onchange="if(this.value)addBot('${p.id}',this.value);this.value=''">
+          <option value="">+ Add bot...</option>${botOpts}
+        </select>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="board-section">
+      <div class="section-title board-header" onclick="toggleBoard('${p.id}')">
+        Board <span class="arrow" id="board-toggle-${p.id}">${_boardOpen[p.id] ? '&#9650;' : '&#9660;'}</span>
+      </div>
+      <div id="board-${p.id}" class="board-content" style="display:${_boardOpen[p.id] ? '' : 'none'}"></div>
+    </div>
+  `;
+
+  // Load dynamic sections
+  loadHoldings(p.id);
+  loadPipeTokens(p.id);
+  if (_boardOpen[p.id]) loadBoard(p.id);
+}
+
+async function loadPipeTokens(pipeId) {
+  try {
+    const r = await fetch(API + `/api/token-usage?days=7`);
+    const d = await r.json();
+    // 파이프 전체 토큰
+    const el = document.getElementById('pipeTokenCard-' + pipeId);
+    if (el) {
+      const total = d.total_tokens || 0;
+      const calls = d.total_calls || 0;
+      el.innerHTML = `<div class="lbl">🔥 AI Tokens</div><div class="val">${total > 0 ? total.toLocaleString() : '0'}</div>
+        <div style="font-size:10px;color:var(--muted)">${calls}회 호출</div>`;
+    }
+    // 봇별 토큰 표시
+    const byBot = d.by_bot || {};
+    for (const [bid, info] of Object.entries(byBot)) {
+      const span = document.getElementById(`bt-${pipeId}-${bid}`);
+      if (span) {
+        const tk = info.tokens || 0;
+        if (tk > 0) {
+          const display = tk >= 1000000 ? (tk/1000000).toFixed(1)+'M' : tk >= 1000 ? (tk/1000).toFixed(0)+'K' : tk;
+          span.textContent = `🔥${display}`;
+          span.title = `${tk.toLocaleString()} tokens (${info.calls}회)`;
+        }
+      }
+    }
+  } catch(e) {}
+}
+
+// ── HOLDINGS ──
+async function loadHoldings(pipeId) {
+  if (pipeId !== selectedPipeId) return;
+  const area = document.getElementById('holdingsArea');
+  if (!area) return;
+  try {
+    const r = await fetch(API + `/api/pipes/${pipeId}/holdings`);
+    const d = await r.json();
+    const h = d.holdings || [];
+    const badge = document.getElementById('holdingsCount');
+    if (badge) badge.textContent = h.length;
+    if (!h.length) {
+      area.innerHTML = '<div style="color:var(--muted);text-align:center;padding:12px;font-size:12px">No holdings</div>';
+      return;
+    }
+    let html = `<table class="holdings-table"><thead><tr>
+      <th>Stock</th><th>Bot</th><th class="right">Qty</th><th class="right">Avg</th><th class="right">Price</th><th class="right">P&L</th><th class="right">%</th>
+    </tr></thead><tbody>`;
+    h.forEach(s => {
+      const cls = s.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+      html += `<tr>
+        <td title="${s.code}">${stockLabel(s.code, s.name)}</td>
+        <td style="color:var(--accent);font-size:11px" title="${s.bot_id || '?'}">${shortBot(s.bot_id || '?')}</td>
+        <td class="right">${s.qty}</td>
+        <td class="right">${s.avg_price.toLocaleString()}</td>
+        <td class="right">${s.current_price.toLocaleString()}</td>
+        <td class="right ${cls}">${s.pnl >= 0 ? '+' : ''}${s.pnl.toLocaleString()}</td>
+        <td class="right ${cls}">${s.pnl_pct >= 0 ? '+' : ''}${s.pnl_pct.toFixed(2)}%</td>
+      </tr>`;
+    });
+    html += `<tr class="total-row">
+      <td colspan="5">Total (cash ${d.cash.toLocaleString()})</td>
+      <td class="right ${d.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toLocaleString()}</td>
+      <td class="right ${d.total_pnl_pct >= 0 ? 'pnl-pos' : 'pnl-neg'}">${d.total_pnl_pct >= 0 ? '+' : ''}${d.total_pnl_pct.toFixed(2)}%</td>
+    </tr></tbody></table>`;
+    area.innerHTML = html;
+  } catch (e) { area.innerHTML = '<div style="color:var(--red);padding:8px;font-size:12px">Load failed</div>'; }
+}
+
+// ── BOARD ──
+function toggleBoard(pipeId) {
+  const el = document.getElementById('board-' + pipeId);
+  const toggle = document.getElementById('board-toggle-' + pipeId);
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    if (toggle) toggle.innerHTML = '&#9650;';
+    _boardOpen[pipeId] = true;
+    loadBoard(pipeId);
+  } else {
+    el.style.display = 'none';
+    if (toggle) toggle.innerHTML = '&#9660;';
+    _boardOpen[pipeId] = false;
+  }
+}
+
+async function loadBoard(pipeId) {
+  const el = document.getElementById('board-' + pipeId);
+  if (!el || !_boardOpen[pipeId]) return;
+  try {
+    const r = await fetch(API + `/api/board?pipe_id=${pipeId}&limit=30`);
+    const d = await r.json();
+    const posts = d.posts || [];
+    if (!posts.length) { el.innerHTML = '<div style="padding:8px;color:var(--muted);text-align:center;font-size:11px">No posts</div>'; return; }
+
+    const bots = [...new Set(posts.map(p => p.bot_id))];
+    const filter = _boardFilter[pipeId] || 'all';
+
+    let html = '<div class="board-filter">';
+    html += `<button class="${filter === 'all' ? 'active' : ''}" onclick="_boardFilter['${pipeId}']='all';loadBoard('${pipeId}')">All</button>`;
+    bots.forEach(b => {
+      html += `<button class="${filter === b ? 'active' : ''}" onclick="_boardFilter['${pipeId}']='${b}';loadBoard('${pipeId}')">${shortBot(b)}</button>`;
+    });
+    html += '</div>';
+
+    const filtered = filter === 'all' ? posts : posts.filter(p => p.bot_id === filter);
+    filtered.forEach(p => {
+      const time = (p.timestamp || '').slice(11, 16);
+      const icon = p.type === 'trade' ? '&#x1F4B0;' : p.type === 'opinion' ? '&#x1F4AC;' : p.type === 'alert' ? '&#x26A0;&#xFE0F;' : '&#x1F4CA;';
+      html += `<div class="board-post">
+        <span class="bp-time">${time}</span>
+        <span class="bp-type">${icon}</span>
+        <span class="bp-bot">${shortBot(p.bot_id)}</span>
+        <span class="bp-msg">${expandableText(p.full_content || p.content || '')}</span>
+      </div>`;
+    });
+    el.innerHTML = html;
+  } catch (e) { el.innerHTML = '<div style="padding:8px;color:var(--red)">Load failed</div>'; }
+}
+
+// ── BOT DETAIL PANEL (Col 3) ──
+async function manualJudge3(botId) {
+  const btn = document.getElementById('judgeBtn3');
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ 분석 중...';
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  try {
+    const r = await fetch(API + `/api/bots/${botId}/judge`, { method: 'POST' });
+    const d = await r.json();
+    if (d.success && d.decision) {
+      const dec = d.decision;
+      alert(`[${dec.decision || 'HOLD'}] conf: ${(dec.confidence||0).toFixed(2)}\n\n${dec.trader_reason || dec.detail || ''}`);
+      if (selectedBotId) loadBotDetail(selectedPipeId, selectedBotId);
+    } else {
+      alert('판단 실패: ' + (d.error || 'AI 응답 없음'));
+    }
+  } catch (e) { alert('요청 실패: ' + e.message); }
+  finally { btn.textContent = orig; btn.disabled = false; btn.style.opacity = '1'; }
+}
+
+async function switchAI(botId, provider, model) {
+  const payload = {};
+  if (provider !== undefined) payload.ai_provider = provider;
+  if (model !== undefined) payload.ai_model = model;
+  const r = await fetch(API + `/api/bots/${botId}/ai-config`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const d = await r.json();
+  if (d.success) {
+    const tag = document.getElementById('aiCurrentTag');
+    if (tag) tag.textContent = (d.ai_provider || '') + (d.ai_model ? ' / ' + d.ai_model : '');
+    // provider 변경 시 모델 셀렉터 다시 채우기
+    if ('ai_provider' in payload) refillModelSelector(botId, d.ai_provider, '');
+  } else {
+    alert(d.error || 'AI 변경 실패');
+  }
+}
+
+// 프로바이더별 모델 카탈로그 캐시
+let _aiModelsCache = null;
+async function getAIModels() {
+  if (_aiModelsCache) return _aiModelsCache;
+  try {
+    const r = await fetch(API + '/api/ai/models');
+    _aiModelsCache = await r.json();
+  } catch (e) {
+    _aiModelsCache = { providers: [] };
+  }
+  return _aiModelsCache;
+}
+
+async function refillModelSelector(botId, provider, currentModel) {
+  const sel = document.getElementById('aiModelSelect');
+  if (!sel) return;
+  const catalog = await getAIModels();
+  const prov = (catalog.providers || []).find(p => p.id === provider);
+  const models = prov ? prov.models : [];
+  sel.innerHTML = models.map(m => {
+    const label = m.name || m.id || '(기본)';
+    const value = m.id || '';
+    const selected = value === (currentModel || '') ? 'selected' : '';
+    return `<option value="${value}" ${selected}>${label}</option>`;
+  }).join('');
+}
+
+async function openBotPanel(pipeId, botId) {
+  selectedBotId = botId;
+  const col = document.getElementById('colBot');
+  col.classList.remove('hidden');
+  syncResizeHandles();
+  document.getElementById('botBody').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Loading...</div>';
+  document.getElementById('botHName').textContent = shortBot(botId);
+  document.getElementById('botHBadge').textContent = '';
+
+  // Highlight selected bot row
+  document.querySelectorAll('.bot-row').forEach(r => r.classList.remove('selected'));
+  const row = document.querySelector(`.bot-row[data-bot="${botId}"]`);
+  if (row) row.classList.add('selected');
+
+  await loadBotDetail(pipeId, botId);
+}
+
+function closeBotPanel() {
+  selectedBotId = null;
+  document.getElementById('colBot').classList.add('hidden');
+  syncResizeHandles();
+  document.querySelectorAll('.bot-row').forEach(r => r.classList.remove('selected'));
+}
+
+async function loadBotDetail(pipeId, botId) {
+  if (botId !== selectedBotId) return;
+  if (!pipeId || !botId) return;
+  const body = document.getElementById('botBody');
+
+  try {
+    const [statusRes, holdingsRes, decisionsRes, boardRes, tokenRes, aiCfgRes] = await Promise.all([
+      fetch(API + `/api/pipes/${pipeId}/bot-status`).then(r => r.json()).catch(() => ({ bots: [] })),
+      fetch(API + `/api/pipes/${pipeId}/holdings`).then(r => r.json()).catch(() => ({ holdings: [] })),
+      fetch(API + `/api/decisions?count=20&bot_id=${botId}`).then(r => r.json()).catch(() => ({ decisions: [] })),
+      fetch(API + `/api/board?pipe_id=${pipeId}&limit=30`).then(r => r.json()).catch(() => ({ posts: [] })),
+      fetch(API + `/api/token-usage?bot_id=${botId}&days=7`).then(r => r.json()).catch(() => ({ total_tokens: 0, total_calls: 0 })),
+      fetch(API + `/api/bots/${botId}/ai-config`).then(r => r.json()).catch(() => ({ ai_provider: '', ai_model: '' })),
+    ]);
+
+    const botData = (statusRes.bots || []).find(b => b.bot_id === botId);
+    const pipe = allPipes.find(p => p.id === pipeId);
+
+    // Header badge
+    const badge = document.getElementById('botHBadge');
+    const hName = document.getElementById('botHName');
+    hName.textContent = botData ? (botData.bot_name || shortBot(botId)) : shortBot(botId);
+    if (botData) {
+      const running = botData.status && botData.status.running;
+      badge.className = 'bot-badge ' + (running ? 'running' : 'stopped');
+      badge.textContent = running ? 'Running' : 'Stopped';
+    } else {
+      badge.className = 'bot-badge stopped';
+      badge.textContent = 'Inactive';
+    }
+
+    let html = '';
+
+    // Info cards
+    const s = botData ? botData.status || {} : {};
+    const pnl = s.pnl || {};
+    const pct = botData ? Math.round((botData.ratio || 0) * 100) : 0;
+    const budget = (botData && botData.budget) || 0;
+
+    const tk = tokenRes || {};
+    const tkTokens = tk.total_tokens || 0;
+    const tkCalls = tk.total_calls || 0;
+    const tkAvg = tkCalls > 0 ? Math.round(tkTokens / tkCalls) : 0;
+
+    html += `<div class="bot-info-grid">
+      <div class="bot-info-card"><div class="lbl">Ratio</div><div class="val">${pct}%</div></div>
+      <div class="bot-info-card"><div class="lbl">Budget</div><div class="val">${budget.toLocaleString()}</div></div>
+      <div class="bot-info-card"><div class="lbl">Realized</div><div class="val ${(pnl.realized||0)>=0?'pnl-pos':'pnl-neg'}">${fmtPnl(pnl.realized||0)}</div></div>
+      <div class="bot-info-card"><div class="lbl">Unrealized</div><div class="val ${(pnl.unrealized||0)>=0?'pnl-pos':'pnl-neg'}">${fmtPnl(pnl.unrealized||0)}</div></div>
+      <div class="bot-info-card"><div class="lbl">Scans</div><div class="val">${s.scan_count || 0}</div></div>
+      <div class="bot-info-card"><div class="lbl">Total P&L</div><div class="val ${(pnl.total||0)>=0?'pnl-pos':'pnl-neg'}">${fmtPnl(pnl.total||0)}</div></div>
+      ${tkTokens > 0 ? `
+      <div class="bot-info-card"><div class="lbl">🔥 Tokens</div><div class="val">${tkTokens.toLocaleString()}</div></div>
+      <div class="bot-info-card"><div class="lbl">AI Calls</div><div class="val">${tkCalls}회 (avg ${tkAvg.toLocaleString()})</div></div>
+      ` : ''}
+    </div>`;
+
+    // AI Provider + Model Switch (AI 봇만 표시)
+    const aiProvider = aiCfgRes.ai_provider || '';
+    const aiModel = aiCfgRes.ai_model || '';
+    const AI_BOTS = ['mirinae','mirinae-2','mirinae-3','evolver','analyst','wallstreet-us-ai'];
+    if (aiProvider || AI_BOTS.includes(botId)) {
+      const cur = aiProvider || 'codex';
+      const catalog = await getAIModels();
+      const providerOpts = (catalog.providers || []).map(p =>
+        `<option value="${p.id}" ${p.id===cur?'selected':''}>${p.id}</option>`
+      ).join('') || ['codex','claude','copilot'].map(p =>
+        `<option value="${p}" ${p===cur?'selected':''}>${p}</option>`
+      ).join('');
+      const curProv = (catalog.providers || []).find(p => p.id === cur);
+      const modelOpts = (curProv ? curProv.models : []).map(m => {
+        const label = m.name || m.id || '(기본)';
+        const value = m.id || '';
+        return `<option value="${value}" ${value===aiModel?'selected':''}>${label}</option>`;
+      }).join('');
+      html += `<div style="margin:10px 0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;gap:6px;font-size:12px;flex-wrap:wrap">
+        <span style="color:var(--muted)">AI</span>
+        <select id="aiProviderSelect" onchange="switchAI('${botId}',this.value,undefined)" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:12px">
+          ${providerOpts}
+        </select>
+        <select id="aiModelSelect" onchange="switchAI('${botId}',undefined,this.value)" style="flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:12px">
+          ${modelOpts}
+        </select>
+        <span id="aiCurrentTag" style="color:var(--accent);font-size:10px">${cur}${aiModel?' / '+aiModel:''}</span>
+      </div>`;
+    }
+
+    // 분석 주기 (interval_seconds) — registry에 범위가 등록된 봇만 표시
+    if (botData && botData.interval_max) {
+      html += `<div style="margin:10px 0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;gap:6px;font-size:12px">
+        <span style="color:var(--muted)">분석 주기</span>
+        <input type="number" id="intervalInput" class="interval-input"
+          min="${botData.interval_min}" max="${botData.interval_max}" step="10"
+          value="${botData.interval_seconds}"
+          data-pipe="${pipeId}" data-bot="${botId}" data-prev="${botData.interval_seconds}"
+          style="width:80px;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px"
+          onchange="commitInterval(this)">
+        <span style="color:var(--muted)">초 (${botData.interval_min}~${botData.interval_max})</span>
+      </div>`;
+    }
+
+    // BotUISpec widgets
+    if (botData && botData.ui && botData.ui.widgets && botData.ui.widgets.length) {
+      html += renderBotUIWidgets(botData);
+    }
+
+    // Bot holdings: use trade-attributed pipe holdings first. Live status can be stale after restart.
+    let botHoldings = (holdingsRes.holdings || []).filter(h => h.bot_id === botId);
+    if (!botHoldings.length) {
+      botHoldings = (s.positions || []).map(p => ({
+        code: p.code || p.symbol || '',
+        name: p.name || '',
+        qty: p.qty || 0,
+        avg_price: p.entry_price || p.price || 0,
+        current_price: p.current_price || p.entry_price || p.price || 0,
+        pnl: p.unrealized || 0,
+        pnl_pct: (p.entry_price || p.price) ? (((p.current_price || p.entry_price || p.price) - (p.entry_price || p.price)) / (p.entry_price || p.price) * 100) : 0,
+      })).filter(h => h.code && h.qty > 0);
+    }
+    html += '<div class="bot-holdings">';
+    html += '<div class="section-title">Holdings</div>';
+    if (botHoldings.length) {
+      html += '<table><thead><tr><th>Stock</th><th style="text-align:right">Qty</th><th style="text-align:right">P&L</th><th style="text-align:right">%</th></tr></thead><tbody>';
+      botHoldings.forEach(h => {
+        const cls = h.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        html += `<tr>
+          <td>${stockLabel(h.code, h.name)}</td>
+          <td style="text-align:right">${h.qty}</td>
+          <td style="text-align:right" class="${cls}">${h.pnl >= 0 ? '+' : ''}${h.pnl.toLocaleString()}</td>
+          <td style="text-align:right" class="${cls}">${h.pnl_pct >= 0 ? '+' : ''}${h.pnl_pct.toFixed(2)}%</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="color:var(--muted);font-size:12px;padding:6px 0">None</div>';
+    }
+    html += '</div>';
+
+    const positionReports = (s.position_reports || []).length
+      ? s.position_reports
+      : buildReportsFromBotStatus(botId, s);
+    if (positionReports.length) {
+      html += renderPositionReportsCompact(positionReports);
+    }
+
+    // Decisions
+    const allDecisions = decisionsRes.decisions || [];
+    const botDecisions = allDecisions.filter(d => d.source === botId || d.bot_id === botId);
+    html += '<div class="bot-decisions">';
+    html += `<div class="section-title">Decisions <span class="badge">${botDecisions.length}</span></div>`;
+    if (botDecisions.length) {
+      html += '<table><thead><tr><th>Time</th><th>Action</th><th>Conf</th><th>Detail</th></tr></thead><tbody>';
+      botDecisions.slice(0, 15).forEach(d => {
+        const time = (d.timestamp || '').slice(11, 16);
+        const action = d.action || '?';
+        const actionCls = action.includes('blocked') ? 'pnl-neg' : action === 'buy' ? 'pnl-neg' : action === 'sell' ? 'pnl-pos' : '';
+        const detail = d.detail || d.reason || '';
+        html += `<tr>
+          <td>${time}</td>
+          <td class="${actionCls}" style="font-weight:600;text-transform:uppercase">${esc(action)}</td>
+          <td>${d.confidence != null ? Number(d.confidence).toFixed(2) : '-'}</td>
+          <td style="max-width:190px;color:var(--muted)">${expandableText(detail)}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div style="color:var(--muted);font-size:12px;padding:6px 0">No decisions</div>';
+    }
+    html += '</div>';
+
+    // Bot board (filtered)
+    const botPosts = (boardRes.posts || []).filter(p => p.bot_id === botId);
+    html += '<div class="bot-board">';
+    html += `<div class="section-title">Board <span class="badge">${botPosts.length}</span></div>`;
+    if (botPosts.length) {
+      botPosts.slice(0, 15).forEach(p => {
+        const time = (p.timestamp || '').slice(11, 16);
+        const icon = p.type === 'trade' ? '&#x1F4B0;' : p.type === 'opinion' ? '&#x1F4AC;' : p.type === 'alert' ? '&#x26A0;&#xFE0F;' : '&#x1F4CA;';
+        html += `<div class="board-post">
+          <span class="bp-time">${time}</span>
+          <span class="bp-type">${icon}</span>
+          <span class="bp-msg">${expandableText(p.full_content || p.content || '')}</span>
+        </div>`;
+      });
+    } else {
+      html += '<div style="color:var(--muted);font-size:12px;padding:6px 0">No posts</div>';
+    }
+    html += '</div>';
+
+    // 수동 판단 버튼 (AI 봇만)
+    if (['mirinae','mirinae-2','evolver','analyst'].includes(botId)) {
+      html += `<div style="margin-top:12px;text-align:center">
+        <button id="judgeBtn3" onclick="manualJudge3('${botId}')" style="padding:6px 16px;border:1px solid var(--accent);border-radius:5px;font-size:12px;background:rgba(88,166,255,0.1);color:var(--accent);cursor:pointer;font-weight:600">🧠 수동 판단 요청</button>
+      </div>`;
+    }
+
+    // UI page link
+    if (BOT_UI_PAGES[botId]) {
+      html += `<div style="margin-top:8px;text-align:center">
+        <a href="${BOT_UI_PAGES[botId]}" style="display:inline-block;padding:6px 16px;border:1px solid var(--accent);border-radius:5px;font-size:12px">Open Dedicated UI</a>
+      </div>`;
+    }
+
+    body.innerHTML = html;
+  } catch (e) {
+    if (loadBotDetail._lastErr !== String(e)) {
+      console.warn('loadBotDetail', e);
+      loadBotDetail._lastErr = String(e);
+    }
+    body.innerHTML = '<div style="padding:16px;color:var(--red)">Load failed</div>';
+  }
+}
+
+// ── BOT UI SPEC WIDGET RENDERER ──
+function renderBotUIWidgets(botData) {
+  const s = botData.status || {};
+  const ui = botData.ui;
+  let html = '<div class="bot-widget-grid">';
+  for (const w of ui.widgets) {
+    const span = w.size === '2x1' || w.size === '2x2' ? 'w-2x1' : 'w-1x1';
+    if (w.type === 'badge') {
+      const running = getNestedVal(s, w.data_key);
+      html += `<div class="${span}"><span class="bot-badge ${running ? 'running' : 'stopped'}">&#x25CF; ${running ? 'Running' : 'Stopped'}</span></div>`;
+    } else if (w.type === 'stat') {
+      const v = getNestedVal(s, w.data_key);
+      html += `<div class="${span} bot-stat"><div class="lbl">${w.label}</div><div class="val">${formatVal(v, w.format, w.color_rule)}</div></div>`;
+    } else if (w.type === 'text') {
+      const v = getNestedVal(s, w.data_key) || {};
+      const code = v.code || 'None';
+      const qty = v.qty || 0;
+      const price = v.price || 0;
+      html += `<div class="${span} bot-text"><span style="color:var(--muted)">${w.label}:</span> ${qty > 0 ? `${stockLabel(code, v.name)} ${qty}@${price.toLocaleString()}` : 'None'}</div>`;
+    } else if (w.type === 'table') {
+      const rows = getNestedVal(s, w.data_key) || [];
+      const cols = w.columns || [];
+      let tbl = `<div class="${span}" style="overflow-x:auto"><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${w.label}</div><table class="bot-table"><thead><tr>`;
+      cols.forEach(c => tbl += `<th>${c.label}</th>`);
+      tbl += '</tr></thead><tbody>';
+      rows.slice(0, 5).forEach(row => {
+        tbl += '<tr>';
+        cols.forEach(c => {
+          let v = row[c.key];
+          if (v === undefined || v === null) v = '-';
+          if (typeof v === 'boolean') v = v ? 'Y' : '';
+          tbl += `<td>${v}</td>`;
+        });
+        tbl += '</tr>';
+      });
+      tbl += '</tbody></table></div>';
+      html += tbl;
+    } else if (w.type === 'list') {
+      const items = getNestedVal(s, w.data_key) || [];
+      html += `<div class="${span}"><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${w.label}</div><ul class="bot-list-widget">`;
+      items.slice(-5).reverse().forEach(item => {
+        const parsed = botActionDetail(item);
+        const t = item.time || '';
+        const timeStr = t.includes('T') ? t.slice(11, 16) : t.slice(0, 5);
+        const actionColor = parsed.failed ? 'var(--red)' : item.action === 'buy' ? 'var(--red)' : item.action === 'sell' ? 'var(--accent)' : 'var(--muted)';
+        html += `<li>
+          ${timeStr ? `<b>${timeStr}</b> ` : ''}<span style="color:${actionColor};font-weight:${parsed.failed ? 700 : 400}">${esc(parsed.label)}</span>
+          ${parsed.reason ? expandableText(parsed.reason, parsed.failed ? 'blocked-reason' : 'exec-detail') : ''}
+        </li>`;
+      });
+      html += '</ul></div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function money(v, signed = false) {
+  const n = Number(v || 0);
+  return (signed && n >= 0 ? '+' : '') + Math.round(n).toLocaleString();
+}
+
+function pct(v, signed = true) {
+  const n = Number(v || 0);
+  return (signed && n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+function reportCell(label, value, cls = '') {
+  return `<div class="position-report-metric"><div class="lbl">${esc(label)}</div><div class="val ${cls}">${value}</div></div>`;
+}
+
+function renderPositionReportsCompact(reports) {
+  let html = '<div class="position-reports"><div class="section-title">Position Reports</div>';
+  reports.forEach((r, i) => {
+    const pnlCls = Number(r.unrealized || 0) >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const rr = r.risk_reward == null ? '-' : `${Number(r.risk_reward).toFixed(2)}:1`;
+    html += `<details class="position-report" ${i === 0 ? 'open' : ''}>
+      <summary>${stockLabel(r.code, r.name)} · ${r.qty}주 · <span class="${pnlCls}">${pct(r.pnl_pct)}</span></summary>
+      <div class="position-report-body">
+        <div class="position-report-grid">
+          ${reportCell('진입가', `${money(r.entry_price)}원`)}
+          ${reportCell('현재가', `${money(r.current_price)}원`)}
+          ${reportCell('목표가', r.target_price ? `${money(r.target_price)}원` : '-')}
+          ${reportCell('손절가', r.stop_loss ? `${money(r.stop_loss)}원` : '-')}
+          ${reportCell('미실현', `${money(r.unrealized, true)}원`, pnlCls)}
+          ${reportCell('손익비', rr)}
+        </div>
+        <div class="position-report-text"><b>판단</b> ${esc(String(r.decision || 'hold').toUpperCase())} · 확신도 ${r.confidence ? Number(r.confidence).toFixed(2) : '-'}</div>
+        ${r.plan_warning ? `<div class="position-report-text"><b>계획 검증</b> ${esc(r.plan_warning)}</div>` : ''}
+        <div class="position-report-text"><b>목표/손절</b> ${esc(r.plan_summary || '')}</div>
+        <div class="position-report-text"><b>매도 조건</b> ${esc(r.sell_trigger || '')}</div>
+        <div class="position-report-text"><b>유지 근거</b>${expandableText(r.hold_rationale || r.thesis || '')}</div>
+        ${r.review_reason ? `<div class="position-report-text"><b>최근 리뷰</b>${expandableText(r.review_reason)}</div>` : ''}
+      </div>
+    </details>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildReportsFromBotStatus(botId, status) {
+  const positions = status.positions || [];
+  const last = status.last_analysis || {};
+  const decision = last.decision || {};
+  const reviews = status.position_reviews || last.position_reviews || [];
+  const debate = status.debate_log || [];
+  return positions.filter(p => (p.code || p.symbol) && Number(p.qty || 0) > 0).map(p => {
+    const code = p.code || p.symbol;
+    const review = reviews.find(r => (r.code || r.symbol) === code) || {};
+    const useDecision = !decision.code || decision.code === code;
+    const d = useDecision ? decision : {};
+    const latestDebate = [...debate].reverse().find(x => x.code === code) || {};
+    const entry = Number(p.entry_price || p.price || p.avg_price || 0);
+    const current = Number(p.current_price || entry || 0);
+    const target = Number(p.target_price || review.target_price || d.target_price || 0);
+    const stop = Number(p.stop_loss || review.stop_loss || d.stop_loss || 0);
+    const qty = Number(p.qty || 0);
+    const unrealized = p.unrealized != null ? Number(p.unrealized) : (current - entry) * qty;
+    const pnlPct = p.pnl_pct != null ? Number(p.pnl_pct) : (entry ? (current - entry) / entry * 100 : 0);
+    const upside = target ? target - current : 0;
+    const downside = stop ? current - stop : 0;
+    const planSummary = [
+      target ? `목표 ${money(target)}원까지 ${pct(current ? (target - current) / current * 100 : 0)}` : '',
+      stop ? `손절 ${money(stop)}원까지 ${pct(current ? (current - stop) / current * 100 : 0, false)} 여유` : '',
+    ].filter(Boolean).join(', ') || '목표가/손절가 미설정';
+    const sellTrigger = [
+      stop ? `현재가가 ${money(stop)}원 이하로 밀리면 손절/축소 검토` : '',
+      target ? `${money(target)}원 도달 시 익절 또는 목표 상향 재평가` : '',
+    ].filter(Boolean).join('; ') || '명확한 매도/재평가 조건이 아직 기록되지 않았습니다.';
+    const thesis = d.trader_reason || latestDebate.trader || review.reason || '보고서 근거가 아직 충분히 기록되지 않았습니다.';
+    const rr = upside > 0 && downside > 0 ? upside / downside : null;
+    let planWarning = '';
+    if (!target || !stop) planWarning = '목표가/손절가 미설정';
+    else if (stop >= current) planWarning = '손절가가 현재가 이상';
+    else if (target <= current) planWarning = '목표가 도달/초과';
+    else if (rr != null && rr < 1.2) planWarning = `손익비 부족(${rr.toFixed(2)}:1 < 1.20:1)`;
+    return {
+      bot_id: botId,
+      code,
+      name: p.name || '',
+      qty,
+      entry_price: entry,
+      current_price: current,
+      target_price: target,
+      stop_loss: stop,
+      unrealized,
+      pnl_pct: pnlPct,
+      held_min: Number(p.held_min || 0),
+      target_gap_pct: current && target ? (target - current) / current * 100 : 0,
+      stop_gap_pct: current && stop ? (current - stop) / current * 100 : 0,
+      risk_reward: rr,
+      plan_warning: review.plan_warning || planWarning,
+      plan_status: review.plan_status || (planWarning ? 'review' : 'ok'),
+      plan_valid: review.plan_valid != null ? review.plan_valid : !planWarning,
+      decision: review.decision || d.decision || 'hold',
+      confidence: d.confidence || latestDebate.confidence || 0,
+      review_reason: review.reason || '',
+      thesis,
+      hold_rationale: thesis,
+      plan_summary: planSummary,
+      sell_trigger: sellTrigger,
+    };
+  });
+}
+
+// ── API ACTIONS ──
+async function togglePipe(id, activate) {
+  if (activate) await fetch(API + `/api/pipes/${id}/start`, { method: 'POST' });
+  else await fetch(API + `/api/pipes/${id}/stop`, { method: 'POST' });
+  load();
+}
+
+async function up(id, d) {
+  await fetch(API + `/api/pipes/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) });
+  load();
+}
+
+async function del(id) {
+  await fetch(API + `/api/pipes/${id}`, { method: 'DELETE' });
+  if (selectedPipeId === id) clearDetail();
+  load();
+}
+
+async function addBot(id, botId) {
+  const r = await fetch(API + `/api/pipes/${id}/link-bot`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bot_id: botId, ratio: 0 }) });
+  const d = await r.json();
+  if (!d.success) alert(d.error || 'Failed to add bot');
+  load();
+}
+
+async function removeBot(id, botId) {
+  const r = await fetch(API + `/api/pipes/${id}/bots/${botId}`, { method: 'DELETE' });
+  const d = await r.json();
+  if (!d.success) alert(d.error || 'Failed to remove bot');
+  if (selectedBotId === botId) closeBotPanel();
+  load();
+}
+
+async function toggleBotEnabled(pipeId, botId, currentlyOff) {
+  const enable = currentlyOff;
+  const action = enable ? 'enable' : 'disable';
+  if (!confirm(`${botId} - ${action}? Pipe will restart.`)) return;
+  const r = await fetch(API + `/api/pipes/${pipeId}/bots/${botId}/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: enable }) });
+  const d = await r.json();
+  if (!d.success) { alert(d.error || 'Toggle failed'); return; }
+  await fetch(API + `/api/pipes/${pipeId}/stop`, { method: 'POST' });
+  await new Promise(r => setTimeout(r, 2000));
+  await fetch(API + `/api/pipes/${pipeId}/start`, { method: 'POST' });
+  load();
+}
+
+// ── RATIO SLIDER ──
+function previewRatio(slider) {
+  const pipeId = slider.dataset.pipe;
+  const botId = slider.dataset.bot;
+  const newVal = +slider.value;
+  const rows = [...document.querySelectorAll(`.ratio-slider[data-pipe="${pipeId}"]`)];
+  if (rows.length <= 1) { updateSliderLabel(slider, newVal); return; }
+
+  const pipe = allPipes.find(p => p.id === pipeId);
+  const cash = pipe ? pipe.cash : 0;
+  const othersRows = rows.filter(r => r.dataset.bot !== botId);
+  const othersSum = othersRows.reduce((s, r) => s + (+r.value), 0);
+  const remaining = 100 - newVal;
+
+  othersRows.forEach(r => {
+    const share = othersSum > 0 ? Math.round(r.value / othersSum * remaining) : Math.round(remaining / othersRows.length);
+    r.value = Math.max(1, share);
+    updateSliderLabel(r, r.value, cash);
+  });
+  updateSliderLabel(slider, newVal, cash);
+}
+
+function updateSliderLabel(slider, val, cash) {
+  const row = slider.closest('.bot-row');
+  if (!row) return;
+  const rl = row.querySelector('.ratio-label');
+  if (rl) rl.textContent = val + '%';
+  if (cash !== undefined) {
+    const bl = row.querySelector('.budget-label');
+    if (bl) bl.textContent = Math.round(cash * val / 100).toLocaleString();
+  }
+}
+
+async function commitRatio(slider) {
+  const pipeId = slider.dataset.pipe;
+  const botId = slider.dataset.bot;
+  const newRatio = +slider.value / 100;
+  await fetch(API + `/api/pipes/${pipeId}/bot-ratio`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bot_id: botId, ratio: newRatio }) });
+  load();
+}
+
+async function commitInterval(input) {
+  const pipeId = input.dataset.pipe;
+  const botId = input.dataset.bot;
+  const sec = parseInt(input.value, 10);
+  const prev = parseInt(input.dataset.prev, 10);
+  const min = parseInt(input.min, 10);
+  const max = parseInt(input.max, 10);
+
+  if (isNaN(sec) || sec < min || sec > max) {
+    input.value = prev;  // 범위 밖 → 롤백
+    return;
+  }
+  try {
+    const res = await fetch(API + `/api/pipes/${pipeId}/bot-interval`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_id: botId, interval_seconds: sec }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      input.dataset.prev = String(sec);
+    } else {
+      input.value = prev;  // 서버 거부 → 롤백
+      alert(data.error || '주기 변경 실패');
+    }
+  } catch (e) {
+    input.value = prev;
+    alert('주기 변경 요청 실패');
+  }
+}
+
+// ── CREATE MODAL ──
+function updateCreateModal() {
+  const sel = document.getElementById('cBot');
+  sel.innerHTML = '<option value="">None</option>' + allBots.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+}
+
+function openCreate() { document.getElementById('createModal').classList.add('open'); }
+function closeCreate() { document.getElementById('createModal').classList.remove('open'); }
+
+async function doCreate() {
+  const name = document.getElementById('cName').value.trim();
+  const budget = +document.getElementById('cBudget').value;
+  const botId = document.getElementById('cBot').value;
+  if (!name || budget <= 0) { alert('Enter name and budget'); return; }
+  const r = await fetch(API + '/api/pipes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, budget, bot_id: botId }) });
+  const d = await r.json();
+  if (d.success) {
+    closeCreate();
+    document.getElementById('cName').value = '';
+    // Auto-select new pipe
+    if (d.id) selectedPipeId = d.id;
+    load();
+  } else alert(d.error || 'Failed');
+}
+
+// ── HELPERS ──
+function shortBot(id) {
+  if (!id) return '?';
+  return id.replace('stealth-volume', 'SV').replace('band-rebound', 'BR').replace('mirinae-2', 'Mi2').replace('mirinae', 'Mi1').replace('etf-', '');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function stockLabel(code, name = '') {
+  const c = String(code || '').trim();
+  if (!c) return '';
+  const n = name || STOCK_NAMES[c] || '';
+  return n ? `${n} (${c})` : c;
+}
+
+function decorateStockCodes(text) {
+  return String(text || '').replace(/(^|[^\(\d])(\d{6})(?![\d\)])/g, (m, prefix, code) => {
+    return prefix + (STOCK_NAMES[code] ? stockLabel(code) : code);
+  });
+}
+
+function expandableText(text, cls = '') {
+  const value = String(text || '');
+  return `<span class="expandable-text collapsed ${cls}" title="클릭해서 전체 보기" onclick="toggleExpand(event)">${esc(decorateStockCodes(value))}</span>`;
+}
+
+function toggleExpand(ev) {
+  ev.stopPropagation();
+  const el = ev.currentTarget;
+  el.classList.toggle('collapsed');
+  el.classList.toggle('expanded');
+}
+
+function botActionDetail(item) {
+  const r = item.result || {};
+  const decision = r.decision || r;
+  const execution = r.execution || {};
+  const action = item.action || execution.action || decision.action || decision.decision || '-';
+  const symbol = execution.symbol || decision.symbol || decision.code || '';
+  const reason = execution.reason || execution.message || r.reason || item.detail || decision.trader_reason || '';
+  const failed = String(action).startsWith('blocked_') || execution.success === false;
+  const label = `${String(action).toUpperCase()} ${stockLabel(symbol, execution.name || decision.name)}`.trim();
+  return { failed, label, reason, execution, decision };
+}
+
+function fmtPnl(v) {
+  return (v >= 0 ? '+' : '') + Number(v).toLocaleString();
+}
+
+function getNestedVal(obj, key) {
+  if (!key || !obj) return null;
+  return key.split('.').reduce((o, k) => o && o[k] !== undefined ? o[k] : null, obj);
+}
+
+function formatVal(v, fmt, colorRule) {
+  if (v === null || v === undefined) return '-';
+  let text = String(v);
+  let style = '';
+  if (fmt === 'won') text = (v >= 0 ? '+' : '') + Number(v).toLocaleString();
+  else if (fmt === 'pct') text = (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
+  else if (fmt === 'count') text = Number(v).toLocaleString();
+  if (colorRule === 'pnl') style = 'color:' + (Number(v) >= 0 ? 'var(--green)' : 'var(--red)');
+  return style ? `<span style="${style}">${text}</span>` : text;
+}
+
+// ── SOFT UPDATE (30s) ──
+async function softUpdate() {
+  if (!selectedPipeId) return;
+  // Refresh holdings
+  loadHoldings(selectedPipeId);
+  // Refresh tokens
+  loadPipeTokens(selectedPipeId);
+  // Refresh open board
+  if (_boardOpen[selectedPipeId]) loadBoard(selectedPipeId);
+  // Refresh bot detail panel
+  if (selectedBotId) loadBotDetail(selectedPipeId, selectedBotId);
+  // Refresh pipe list data (lightweight)
+  try {
+    const pr = await fetch(API + '/api/pipes').then(r => r.json());
+    allPipes = pr.pipes || [];
+    renderPipeList();
+    renderBudget(pr);
+  } catch (e) { /* ignore */ }
+}
+
+// ── INIT ──
+applySavedLayout();
+initResizeHandles();
+load();
+setInterval(softUpdate, 30000);
+</script>
+</body>
+</html>

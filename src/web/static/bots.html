@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - Bot Viewer</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --orange: #db6d28;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .badge { background: var(--accent); color: var(--bg); font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .header a { color: var(--accent); text-decoration: none; margin-left: auto; font-size: 14px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+
+  /* 필터 바 */
+  .filters { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .filter-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  /* 봇 카드 그리드 */
+  .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+
+  .bot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color .2s; }
+  .bot-card:hover { border-color: var(--accent); }
+
+  .card-header { padding: 16px 20px 12px; display: flex; align-items: flex-start; gap: 12px; }
+  .card-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .card-icon.momentum { background: linear-gradient(135deg, #1f6feb, #58a6ff); }
+  .card-icon.mean-revert { background: linear-gradient(135deg, #238636, #3fb950); }
+  .card-icon.arbitrage { background: linear-gradient(135deg, #9e6a03, #d29922); }
+  .card-icon.income { background: linear-gradient(135deg, #8957e5, #bc8cff); }
+  .card-icon.macro { background: linear-gradient(135deg, #da3633, #f85149); }
+  .card-icon.custom { background: linear-gradient(135deg, #6e7681, #8b949e); }
+
+  .card-title-area { flex: 1; min-width: 0; }
+  .card-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-version { font-size: 11px; color: var(--text2); background: var(--bg); padding: 1px 6px; border-radius: 4px; }
+  .card-subtitle { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  .card-status { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600; flex-shrink: 0; }
+  .card-status.running { background: rgba(63,185,80,.15); color: var(--green); }
+  .card-status.stopped { background: rgba(139,148,158,.1); color: var(--text2); }
+
+  .card-body { padding: 0 20px 16px; }
+  .card-desc { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
+  .card-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .action-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600; }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .action-btn.run { background: rgba(63,185,80,.12); border-color: rgba(63,185,80,.45); color: var(--green); }
+  .action-btn.run:hover { background: rgba(63,185,80,.2); }
+
+  /* 메타 뱃지 */
+  .meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .meta-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); color: var(--text2); }
+  .meta-badge.type { border-color: var(--accent); color: var(--accent); }
+  .meta-badge.session { border-color: var(--green); color: var(--green); }
+
+  /* 위험도 */
+  .risk-bar { display: flex; gap: 3px; align-items: center; margin-bottom: 14px; }
+  .risk-label { font-size: 11px; color: var(--text2); margin-right: 6px; }
+  .risk-dot { width: 14px; height: 6px; border-radius: 3px; background: var(--border); }
+  .risk-dot.filled.r1 { background: var(--green); }
+  .risk-dot.filled.r2 { background: #6bc46d; }
+  .risk-dot.filled.r3 { background: var(--yellow); }
+  .risk-dot.filled.r4 { background: var(--orange); }
+  .risk-dot.filled.r5 { background: var(--red); }
+
+  /* 파라미터 테이블 */
+  .params-toggle { font-size: 12px; color: var(--accent); cursor: pointer; margin-bottom: 8px; user-select: none; }
+  .params-table { width: 100%; border-collapse: collapse; font-size: 12px; display: none; }
+  .params-table.open { display: table; }
+  .params-table th { text-align: left; color: var(--text2); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .params-table td { padding: 4px 8px; border-bottom: 1px solid rgba(48,54,61,.5); }
+  .params-table td:last-child { color: var(--text2); }
+
+  /* 태그 */
+  .tags { display: flex; gap: 4px; flex-wrap: wrap; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .tag { font-size: 11px; color: var(--accent); background: rgba(88,166,255,.1); padding: 2px 8px; border-radius: 4px; }
+
+  /* 전략 설명 (접기) */
+  .strategy-text { font-size: 12px; color: var(--text2); line-height: 1.6; background: var(--bg); padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; display: none; }
+  .strategy-text.open { display: block; }
+
+  /* 빈 상태 */
+  .empty { text-align: center; padding: 80px 20px; color: var(--text2); }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Bot Viewer</h1>
+  <span class="badge" id="botCount">0</span>
+  <a href="/">Dashboard</a>
+</div>
+
+<div class="container">
+  <div class="filters" id="filters"></div>
+  <div class="bot-grid" id="botGrid"></div>
+</div>
+
+<script>
+const API = '/api';
+let allBots = [];
+let activeFilter = 'all';
+
+const CATEGORY_ICONS = {
+  '모멘텀': '&#x21e7;', '역추세': '&#x21c5;', '차익': '&#x2194;',
+  '배당/수익': '&#x25c9;', '매크로': '&#x2605;', '커스텀': '&#x2699;',
+};
+const CATEGORY_CLASS = {
+  '모멘텀': 'momentum', '역추세': 'mean-revert', '차익': 'arbitrage',
+  '배당/수익': 'income', '매크로': 'macro', '커스텀': 'custom',
+};
+
+async function loadBots() {
+  try {
+    const res = await fetch(`${API}/bots`);
+    const data = await res.json();
+    allBots = data.bots || [];
+    document.getElementById('botCount').textContent = allBots.length;
+    buildFilters();
+    renderBots();
+  } catch (e) {
+    document.getElementById('botGrid').innerHTML =
+      '<div class="empty"><div class="empty-icon">&#x26A0;</div>봇 데이터를 불러올 수 없습니다</div>';
+  }
+}
+
+function buildFilters() {
+  const cats = ['all', ...new Set(allBots.map(b => b.category))];
+  const labels = { all: '전체' };
+  const el = document.getElementById('filters');
+  el.innerHTML = cats.map(c => {
+    const label = labels[c] || c;
+    const count = c === 'all' ? allBots.length : allBots.filter(b => b.category === c).length;
+    return `<button class="filter-btn ${c === activeFilter ? 'active' : ''}" data-cat="${c}">${label} (${count})</button>`;
+  }).join('');
+  el.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.onclick = () => { activeFilter = btn.dataset.cat; buildFilters(); renderBots(); };
+  });
+}
+
+function renderBots() {
+  const filtered = activeFilter === 'all' ? allBots : allBots.filter(b => b.category === activeFilter);
+  const grid = document.getElementById('botGrid');
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">&#x1F916;</div>등록된 봇이 없습니다</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map((b, i) => {
+    const icon = CATEGORY_ICONS[b.category] || '&#x2699;';
+    const cls = CATEGORY_CLASS[b.category] || 'custom';
+    const riskDots = [1,2,3,4,5].map(n =>
+      `<div class="risk-dot ${n <= b.risk_level ? 'filled r' + n : ''}"></div>`
+    ).join('');
+    const riskLabel = ['', '매우 낮음', '낮음', '보통', '높음', '매우 높음'][b.risk_level] || '';
+    const params = (b.params || []).map(p =>
+      `<tr><td><b>${p.label}</b></td><td>${p.default}${p.unit}</td><td>${p.description}</td></tr>`
+    ).join('');
+    const tags = (b.tags || []).map(t => `<span class="tag">#${t}</span>`).join('');
+
+    return `
+    <div class="bot-card" style="cursor:pointer" onclick="location.href='/bots/${b.id}'">
+      <div class="card-header">
+        <div class="card-icon ${cls}">${icon}</div>
+        <div class="card-title-area">
+          <div class="card-title">${b.name} <span class="card-version">v${b.version}</span></div>
+          <div class="card-subtitle">${b.id}</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-desc">${b.description}</div>
+        <div class="meta-row">
+          <span class="meta-badge type">${b.bot_type}</span>
+          <span class="meta-badge session">${b.market_session}</span>
+          <span class="meta-badge">${b.category}</span>
+        </div>
+        <div class="risk-bar">
+          <span class="risk-label">위험도</span>
+          ${riskDots}
+          <span class="risk-label" style="margin-left:4px">${riskLabel}</span>
+        </div>
+        <div class="params-toggle" onclick="toggleEl(this, 'strategy-${i}')">&#x25B6; 전략 상세</div>
+        <div class="strategy-text" id="strategy-${i}">${b.strategy}</div>
+        <div class="params-toggle" onclick="toggleEl(this, 'params-${i}')">&#x25B6; 설정 파라미터 (${b.params?.length || 0})</div>
+        <table class="params-table" id="params-${i}">
+          <tr><th>항목</th><th>기본값</th><th>설명</th></tr>
+          ${params}
+        </table>
+        <div class="card-actions" onclick="event.stopPropagation()">
+          <button class="action-btn run" data-bot-id="${b.id}" data-bot-name="${b.name}" onclick="manualRunBot(this.dataset.botId, this.dataset.botName)">수동 실행</button>
+          <button class="action-btn" onclick="location.href='/bots/${b.id}'">상세/파이프</button>
+        </div>
+      </div>
+      ${tags ? `<div class="tags">${tags}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleEl(trigger, id) {
+  const el = document.getElementById(id);
+  const isOpen = el.classList.toggle('open');
+  trigger.innerHTML = (isOpen ? '&#x25BC; ' : '&#x25B6; ') + trigger.textContent.slice(2);
+}
+
+async function manualRunBot(botId, botName) {
+  const raw = prompt(`${botName} 전용 파이프 예산(원)을 입력하세요.`, '50000');
+  if (raw === null) return;
+  const budget = Number(String(raw).replace(/[^0-9]/g, ''));
+  if (!Number.isFinite(budget) || budget <= 0) {
+    alert('예산은 1원 이상 숫자로 입력해야 합니다.');
+    return;
+  }
+
+  try {
+    const created = await fetch(`${API}/pipes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `수동 ${botName}`,
+        budget,
+        bot_id: botId,
+        description: `Manual run pipe for ${botId}`,
+      }),
+    }).then(r => r.json());
+
+    if (!created.success) {
+      alert(created.error || '파이프 생성 실패');
+      return;
+    }
+
+    const started = await fetch(`${API}/pipes/${created.pipe_id}/start`, { method: 'POST' }).then(r => r.json());
+    if (!started.success) {
+      alert(started.error || started.message || '파이프 시작 실패');
+      return;
+    }
+
+    alert(`${botName} 수동 실행 시작: ${created.pipe_id}`);
+  } catch (e) {
+    alert('수동 실행 실패: ' + e.message);
+  }
+}
+
+loadBots();
+</script>
+</body>
+</html>

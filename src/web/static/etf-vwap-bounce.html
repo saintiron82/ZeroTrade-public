@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - VWAP Bounce Bot</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Nav */
+  .nav { display: flex; gap: 16px; padding: 12px 32px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .nav a { color: var(--text2); text-decoration: none; font-size: 14px; padding: 4px 8px; border-radius: 6px; transition: all .15s; }
+  .nav a:hover { color: var(--text); background: var(--bg); }
+  .nav a.active { color: var(--accent); background: rgba(88,166,255,.1); }
+
+  /* Header */
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .status-badge { font-size: 12px; padding: 3px 10px; border-radius: 10px; font-weight: 600; }
+  .status-badge.running { background: rgba(63,185,80,.15); color: var(--green); }
+  .status-badge.stopped { background: rgba(139,148,158,.1); color: var(--text2); }
+  .scan-count { font-size: 13px; color: var(--text2); }
+  .scan-count b { color: var(--accent); }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); transition: all .15s; }
+  .btn-start { background: rgba(63,185,80,.15); color: var(--green); border-color: var(--green); }
+  .btn-start:hover { background: rgba(63,185,80,.3); }
+  .btn-stop { background: rgba(248,81,73,.1); color: var(--red); border-color: var(--red); }
+  .btn-stop:hover { background: rgba(248,81,73,.25); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* Card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .card-title { font-size: 14px; font-weight: 600; padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .card-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .card-body { padding: 16px 20px; }
+
+  /* Holding */
+  .holding-empty { color: var(--text2); font-size: 13px; text-align: center; padding: 20px 0; }
+  .holding-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .holding-item { display: flex; flex-direction: column; gap: 2px; }
+  .holding-label { font-size: 11px; color: var(--text2); }
+  .holding-value { font-size: 16px; font-weight: 600; }
+  .holding-value.positive { color: var(--green); }
+  .holding-value.negative { color: var(--red); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; color: var(--text2); font-weight: 500; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid rgba(48,54,61,.4); white-space: nowrap; }
+  tbody tr { transition: background .1s; }
+  tbody tr:hover { background: rgba(88,166,255,.04); }
+  tbody tr.signal-ready { background: rgba(63,185,80,.08); }
+  .check { color: var(--green); font-weight: 700; }
+  .dash { color: var(--text2); }
+  .gap-positive { color: var(--green); }
+  .gap-negative { color: var(--red); }
+
+  /* Config */
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .config-item { background: var(--bg); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); }
+  .config-label { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+  .config-value { font-size: 15px; font-weight: 600; }
+
+  /* Log */
+  .log-list { max-height: 320px; overflow-y: auto; }
+  .log-item { font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,.3); line-height: 1.5; color: var(--text2); }
+  .log-item .log-time { color: var(--accent); margin-right: 8px; font-family: 'SF Mono', monospace; font-size: 11px; }
+  .log-item .log-action { font-weight: 600; }
+  .log-item .log-action.buy { color: var(--red); }
+  .log-item .log-action.sell { color: var(--green); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Pulse animation */
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="/">Dashboard</a>
+  <a href="/bots">Bots</a>
+  <a href="/etf-vwap-bounce" class="active">VWAP</a>
+</div>
+
+<div class="header">
+  <h1>VWAP Bounce Bot</h1>
+  <span class="status-badge stopped" id="statusBadge">STOPPED</span>
+  <span class="scan-count" id="scanCount"></span>
+  <div class="header-actions">
+    <button class="btn btn-start" id="btnStart" onclick="startBot()">시작</button>
+    <button class="btn btn-stop" id="btnStop" onclick="stopBot()" disabled>정지</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Row 1: Holding + Config -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>보유 종목</div>
+      <div class="card-body" id="holdingCard">
+        <div class="holding-empty">보유 종목 없음</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>봇 설정</div>
+      <div class="card-body">
+        <div class="config-grid" id="configGrid">
+          <div class="config-item"><div class="config-label">스캔 주기</div><div class="config-value" id="cfgInterval">—</div></div>
+          <div class="config-item"><div class="config-label">진입 임계 (갭%)</div><div class="config-value" id="cfgDip">—</div></div>
+          <div class="config-item"><div class="config-label">손절 %</div><div class="config-value" id="cfgSL">—</div></div>
+          <div class="config-item"><div class="config-label">익절 %</div><div class="config-value" id="cfgTP">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Watchlist -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title"><span class="dot" style="background:var(--green)"></span>워치리스트 <span id="watchCount" style="font-size:12px;color:var(--text2);font-weight:400;margin-left:4px"></span></div>
+    <div class="card-body table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>종목</th>
+            <th>VWAP</th>
+            <th>현재가</th>
+            <th>갭 %</th>
+            <th>VWAP 아래</th>
+            <th>크로스업</th>
+            <th>거래량 확인</th>
+          </tr>
+        </thead>
+        <tbody id="watchBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px 0">데이터 로딩 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Row 3: Log -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--text2)"></span>최근 판단 로그</div>
+    <div class="card-body">
+      <div class="log-list" id="logList">
+        <div class="holding-empty">로그 없음</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '/api/bots/etf-vwap-bounce';
+let polling = null;
+
+function fmt(n) { return n != null ? Number(n).toLocaleString('ko-KR') : '—'; }
+function fmtPct(n) { return n != null ? (n >= 0 ? '+' : '') + n.toFixed(2) + '%' : '—'; }
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${API}/status`);
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    render(d);
+  } catch (e) {
+    console.error('status fetch failed:', e);
+  }
+}
+
+function render(d) {
+  // Status badge
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = d.running ? 'RUNNING' : 'STOPPED';
+  badge.className = 'status-badge ' + (d.running ? 'running' : 'stopped');
+
+  // Scan count
+  document.getElementById('scanCount').innerHTML = d.scan_count != null
+    ? `스캔 <b>${d.scan_count}</b>회` : '';
+
+  // Buttons
+  document.getElementById('btnStart').disabled = d.running;
+  document.getElementById('btnStop').disabled = !d.running;
+
+  // Holding
+  const hc = document.getElementById('holdingCard');
+  if (d.holding && d.holding.code) {
+    const h = d.holding;
+    const vwap = d.holding_buy_vwap;
+    const pnl = vwap && h.price ? ((h.price - vwap) / vwap * 100) : null;
+    const pnlCls = pnl != null ? (pnl >= 0 ? 'positive' : 'negative') : '';
+    hc.innerHTML = `
+      <div class="holding-info">
+        <div class="holding-item"><span class="holding-label">종목</span><span class="holding-value">${h.code}</span></div>
+        <div class="holding-item"><span class="holding-label">수량</span><span class="holding-value">${fmt(h.qty)}주</span></div>
+        <div class="holding-item"><span class="holding-label">매수 VWAP</span><span class="holding-value">${fmt(vwap)}</span></div>
+        <div class="holding-item"><span class="holding-label">수익률</span><span class="holding-value ${pnlCls}">${pnl != null ? fmtPct(pnl) : '—'}</span></div>
+      </div>`;
+  } else {
+    hc.innerHTML = '<div class="holding-empty">보유 종목 없음</div>';
+  }
+
+  // Config
+  if (d.config) {
+    document.getElementById('cfgInterval').textContent = d.config.interval + '초';
+    document.getElementById('cfgDip').textContent = d.config.dip_threshold_pct + '%';
+    document.getElementById('cfgSL').textContent = d.config.stop_loss_pct + '%';
+    document.getElementById('cfgTP').textContent = d.config.take_profit_pct + '%';
+  }
+
+  // Watchlist
+  const wb = document.getElementById('watchBody');
+  const wl = d.watchlist || [];
+  document.getElementById('watchCount').textContent = wl.length ? `(${wl.length})` : '';
+  if (!wl.length) {
+    wb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px 0">감시 종목 없음</td></tr>';
+  } else {
+    wb.innerHTML = wl.map(w => {
+      const allReady = w.was_below && w.crossed_above && w.vol_confirmed;
+      const gapCls = w.gap_pct >= 0 ? 'gap-positive' : 'gap-negative';
+      const ck = v => v ? '<span class="check">&#10003;</span>' : '<span class="dash">&mdash;</span>';
+      return `<tr class="${allReady ? 'signal-ready' : ''}">
+        <td><b>${w.code}</b></td>
+        <td>${fmt(w.vwap)}</td>
+        <td>${fmt(w.price)}</td>
+        <td class="${gapCls}">${fmtPct(w.gap_pct)}</td>
+        <td style="text-align:center">${ck(w.was_below)}</td>
+        <td style="text-align:center">${ck(w.crossed_above)}</td>
+        <td style="text-align:center">${ck(w.vol_confirmed)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Recent trades / log
+  const ll = document.getElementById('logList');
+  const trades = d.recent_trades || [];
+  if (!trades.length) {
+    ll.innerHTML = '<div class="holding-empty">로그 없음</div>';
+  } else {
+    ll.innerHTML = trades.slice(0, 20).map(t => {
+      const time = t.time || t.timestamp || '';
+      const short = typeof time === 'string' ? time.slice(11, 19) : time;
+      const action = (t.action || t.side || '').toLowerCase();
+      const actionCls = action.includes('buy') ? 'buy' : action.includes('sell') ? 'sell' : '';
+      const label = action.includes('buy') ? '매수' : action.includes('sell') ? '매도' : action;
+      return `<div class="log-item">
+        <span class="log-time">${short}</span>
+        <span class="log-action ${actionCls}">${label}</span>
+        ${t.code || ''} ${t.qty ? t.qty + '주' : ''} ${t.price ? '@' + fmt(t.price) : ''}
+        ${t.reason ? '<span style="color:var(--text2);margin-left:4px">(' + t.reason + ')</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+}
+
+async function startBot() {
+  if (!confirm('VWAP Bounce 봇을 시작합니까?')) return;
+  try {
+    const res = await fetch(`${API}/start`, { method: 'POST' });
+    if (res.ok) fetchStatus();
+  } catch (e) { alert('시작 실패: ' + e.message); }
+}
+
+async function stopBot() {
+  if (!confirm('봇을 정지합니까?')) return;
+  try {
+    const res = await fetch(`${API}/stop`, { method: 'POST' });
+    if (res.ok) fetchStatus();
+  } catch (e) { alert('정지 실패: ' + e.message); }
+}
+
+// Init
+fetchStatus();
+polling = setInterval(fetchStatus, 5000);
+</script>
+</body>
+</html>

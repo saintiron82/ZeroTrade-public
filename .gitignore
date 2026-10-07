@@ -1,0 +1,28 @@
+.env
+.kis_token.json
+.kis_real_token.json
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+.worktrees/
+logs/
+
+.DS_Store
+.codex/
+.npm-cache/
+work/
+data/*.bak-*
+data/trading.db
+data/zerotrade.db
+
+# winner-1 자율 에이전트 작업장 (런타임 생성, 커밋 금지)
+data/agent_workspace/
+
+# 실거래/전략 운용 데이터 (public 미러에서 완전 제외)
+data/
+conditions/

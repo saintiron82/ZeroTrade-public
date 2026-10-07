@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - News</title>
+<style>
+  :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  a { color:var(--accent); text-decoration:none; }
+  .container { max-width:1100px; margin:0 auto; padding:16px; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:16px; }
+  header h1 { font-size:18px; flex:1; }
+  nav a { font-size:13px; margin-left:12px; }
+
+  /* 통계 바 */
+  .stats { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+  .stat-chip { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-size:12px; }
+  .stat-chip b { font-size:15px; margin-right:4px; }
+
+  /* 탭 */
+  .tabs { display:flex; gap:0; margin-bottom:12px; overflow-x:auto; }
+  .tab { padding:7px 14px; font-size:12px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--muted); white-space:nowrap; }
+  .tab:first-child { border-radius:6px 0 0 6px; }
+  .tab:last-child { border-radius:0 6px 6px 0; }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  /* 검색 */
+  .search-bar { display:flex; gap:8px; margin-bottom:14px; align-items:center; }
+  .search-bar input { flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:6px; font-size:14px; }
+  .search-bar input:focus { outline:none; border-color:var(--accent); }
+  .search-bar button { background:var(--accent); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer; }
+  .toggle-semantic { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--muted); cursor:pointer; }
+  .toggle-semantic input { accent-color:var(--accent); }
+
+  /* 뉴스 카드 */
+  .news-list { display:flex; flex-direction:column; gap:8px; }
+  .news-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .news-card:hover { border-color:var(--accent); }
+  .news-meta { display:flex; align-items:center; gap:6px; margin-bottom:4px; flex-wrap:wrap; }
+  .badge { padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; }
+  .badge-cat { background:rgba(88,166,255,.15); color:var(--accent); }
+  .badge-strong-pos { background:rgba(63,185,80,.3); color:var(--green); font-weight:700; }
+  .badge-pos { background:rgba(63,185,80,.15); color:var(--green); }
+  .badge-neg { background:rgba(248,81,73,.15); color:var(--red); }
+  .badge-strong-neg { background:rgba(248,81,73,.3); color:var(--red); font-weight:700; }
+  .badge-neu { background:rgba(139,148,158,.15); color:var(--muted); }
+  .badge-score { background:rgba(210,153,34,.15); color:var(--yellow); }
+  .badge-impact-high { background:rgba(248,81,73,.2); color:var(--red); font-size:9px; font-weight:700; }
+  .badge-impact-med { background:rgba(210,153,34,.15); color:var(--yellow); font-size:9px; }
+  .news-reasons { display:flex; gap:4px; flex-wrap:wrap; margin-top:3px; }
+  .reason { font-size:10px; color:var(--muted); background:var(--bg); border:1px dashed var(--border); border-radius:3px; padding:1px 5px; }
+  .news-time { font-size:11px; color:var(--muted); margin-left:auto; }
+  .news-title { font-size:14px; font-weight:600; margin-bottom:3px; }
+  .news-title a { color:var(--text); }
+  .news-title a:hover { color:var(--accent); }
+  .news-summary { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .news-tags { display:flex; gap:4px; flex-wrap:wrap; }
+  .tag { padding:1px 6px; border-radius:3px; font-size:10px; background:var(--bg); border:1px solid var(--border); color:var(--muted); }
+
+  /* 더 보기 */
+  .load-more { text-align:center; padding:16px; }
+  .load-more button { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 24px; border-radius:6px; font-size:13px; cursor:pointer; }
+  .load-more button:hover { border-color:var(--accent); }
+  .empty { text-align:center; padding:40px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>News</h1>
+    <nav><a href="/">Dashboard</a><a href="/pipes">Pipes</a><a href="/bots">Bots</a><a href="/trades">Trades</a><a href="/news">News</a><a href="/logs">Logs</a></nav>
+  </header>
+
+  <!-- AI 분류기 설정 -->
+  <div id="aiClassifierBar" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="aiEnabledToggle" onchange="saveAIConfig()"> AI 감성 분류 사용
+    </label>
+    <span style="color:var(--muted)">|</span>
+    <span style="color:var(--muted)">Provider</span>
+    <select id="aiProviderSel" onchange="onProviderChange()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:3px 6px;border-radius:4px"></select>
+    <span style="color:var(--muted)">Model</span>
+    <select id="aiModelSel" onchange="saveAIConfig()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:3px 6px;border-radius:4px;min-width:180px"></select>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px">
+      <input type="checkbox" id="fallbackToggle" onchange="saveAIConfig()"> AI 실패 시 정규식 폴백
+    </label>
+    <span id="aiConfigStatus" style="margin-left:auto;color:var(--accent);font-size:11px"></span>
+  </div>
+
+  <!-- 통계 -->
+  <div class="stats" id="statsBar"></div>
+
+  <!-- 카테고리 탭 -->
+  <div class="tabs" id="catTabs"></div>
+
+  <!-- 검색 -->
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="뉴스 검색..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">검색</button>
+    <label class="toggle-semantic"><input type="checkbox" id="semanticToggle" checked> AI 검색</label>
+  </div>
+
+  <!-- 뉴스 목록 -->
+  <div class="news-list" id="newsList"></div>
+  <div class="load-more" id="loadMore" style="display:none">
+    <button onclick="loadMore()">더 보기</button>
+  </div>
+  <div class="empty" id="emptyMsg" style="display:none">뉴스가 없습니다</div>
+</div>
+
+<script>
+const API='';
+let currentCategory='';
+let currentOffset=0;
+let isSearchMode=false;
+const PAGE_SIZE=30;
+
+async function init(){
+  const [statsRes, catsRes]=await Promise.all([
+    fetch(API+'/api/news/stats').then(r=>r.json()),
+    fetch(API+'/api/news/categories').then(r=>r.json()),
+  ]);
+  renderStats(statsRes);
+  renderTabs(catsRes.categories||[]);
+  loadNews();
+  loadAIConfig();
+}
+
+// ── AI 분류기 설정 ──
+let _modelsCache = null;
+let _newsCfg = null;
+
+async function loadAIConfig(){
+  try {
+    const [models, cfg] = await Promise.all([
+      fetch('/api/ai/models').then(r=>r.json()),
+      fetch('/api/news/ai-config').then(r=>r.json()),
+    ]);
+    _modelsCache = models;
+    _newsCfg = cfg;
+    document.getElementById('aiEnabledToggle').checked = !!cfg.ai_enabled;
+    document.getElementById('fallbackToggle').checked = !!cfg.fallback_to_regex;
+
+    const provSel = document.getElementById('aiProviderSel');
+    provSel.innerHTML = (models.providers||[]).map(p =>
+      `<option value="${p.id}" ${p.id===cfg.provider?'selected':''}>${p.id}</option>`
+    ).join('');
+    renderModelOptions();
+    updateStatus();
+  } catch(e) {
+    document.getElementById('aiConfigStatus').textContent = '설정 로드 실패';
+  }
+}
+
+function renderModelOptions(){
+  const provSel = document.getElementById('aiProviderSel');
+  const modSel = document.getElementById('aiModelSel');
+  const prov = (_modelsCache?.providers||[]).find(p => p.id === provSel.value);
+  const models = prov ? prov.models : [];
+  const curModel = _newsCfg?.model || '';
+  modSel.innerHTML = models.map(m => {
+    const value = m.id || '';
+    const label = m.name || m.id || '(기본)';
+    return `<option value="${value}" ${value===curModel?'selected':''}>${label}</option>`;
+  }).join('');
+}
+
+function onProviderChange(){
+  // provider 바뀌면 model 옵션 갱신 후 자동 저장
+  renderModelOptions();
+  saveAIConfig();
+}
+
+async function saveAIConfig(){
+  const body = {
+    ai_enabled: document.getElementById('aiEnabledToggle').checked,
+    provider: document.getElementById('aiProviderSel').value,
+    model: document.getElementById('aiModelSel').value,
+    fallback_to_regex: document.getElementById('fallbackToggle').checked,
+  };
+  try {
+    const r = await fetch('/api/news/ai-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    _newsCfg = await r.json();
+    updateStatus();
+  } catch(e){
+    document.getElementById('aiConfigStatus').textContent = '저장 실패';
+  }
+}
+
+function updateStatus(){
+  const cfg = _newsCfg || {};
+  const el = document.getElementById('aiConfigStatus');
+  if (cfg.ai_enabled) {
+    el.textContent = `활성 · ${cfg.provider}/${cfg.model||'기본'}`;
+    el.style.color = 'var(--accent)';
+  } else {
+    el.textContent = '정규식 모드 (AI 비활성)';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+function renderStats(d){
+  const bar=document.getElementById('statsBar');
+  let html=`<div class="stat-chip"><b>${d.total||0}</b>전체</div>`;
+  (d.by_category||[]).slice(0,6).forEach(c=>{
+    if(c.category) html+=`<div class="stat-chip"><b>${c.cnt}</b>${c.category}</div>`;
+  });
+  bar.innerHTML=html;
+}
+
+function renderTabs(cats){
+  const el=document.getElementById('catTabs');
+  let html=`<div class="tab active" onclick="selectCat('')">전체</div>`;
+  cats.forEach(c=>html+=`<div class="tab" onclick="selectCat('${c}')">${c}</div>`);
+  el.innerHTML=html;
+}
+
+function selectCat(cat){
+  currentCategory=cat;
+  currentOffset=0;
+  isSearchMode=false;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',
+    (cat===''&&t.textContent==='전체')||(t.textContent===cat)));
+  loadNews();
+}
+
+async function loadNews(){
+  const list=document.getElementById('newsList');
+  if(currentOffset===0) list.innerHTML='';
+  const params=new URLSearchParams({count:PAGE_SIZE,offset:currentOffset});
+  if(currentCategory) params.set('category',currentCategory);
+  const r=await fetch(API+'/api/news/enriched?'+params);
+  const d=await r.json();
+  renderNews(d.news||[],currentOffset===0);
+}
+
+async function doSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  if(!q) { isSearchMode=false; currentOffset=0; loadNews(); return; }
+  isSearchMode=true;
+  currentOffset=0;
+  const semantic=document.getElementById('semanticToggle').checked;
+  const endpoint=semantic?'/api/news/semantic':'/api/news/search';
+  const param=semantic?'q':'q';
+  const r=await fetch(API+`${endpoint}?${param}=${encodeURIComponent(q)}&count=${PAGE_SIZE}`);
+  const d=await r.json();
+  renderNews(d.news||[],true);
+}
+
+function renderNews(news,replace){
+  const list=document.getElementById('newsList');
+  const empty=document.getElementById('emptyMsg');
+  const more=document.getElementById('loadMore');
+  if(replace) list.innerHTML='';
+  if(!news.length&&replace){empty.style.display='';more.style.display='none';return;}
+  empty.style.display='none';
+  more.style.display=news.length>=PAGE_SIZE&&!isSearchMode?'':'none';
+
+  news.forEach(n=>{
+    const card=document.createElement('div');
+    card.className='news-card';
+
+    // 감성 파싱 (JSON 또는 단순 문자열 호환)
+    let sent={sentiment:'neutral',label:'중립',score:0,impact:'low',reasons:[]};
+    try{
+      if(typeof n.sentiment==='string'&&n.sentiment.startsWith('{'))
+        sent=JSON.parse(n.sentiment);
+      else if(typeof n.sentiment==='string')
+        sent={sentiment:n.sentiment,label:n.sentiment==='positive'?'호재':n.sentiment==='negative'?'악재':'중립',score:0,impact:'low',reasons:[]};
+    }catch(e){}
+
+    const sentMap={strong_positive:'badge-strong-pos',positive:'badge-pos',neutral:'badge-neu',negative:'badge-neg',strong_negative:'badge-strong-neg'};
+    const sentCls=sentMap[sent.sentiment]||'badge-neu';
+    const impactCls=sent.impact==='high'?'badge-impact-high':sent.impact==='medium'?'badge-impact-med':'';
+    const timeAgo=formatTimeAgo(n.timestamp||n.published);
+    const relScore=n.relevance?`<span class="badge badge-score">${(n.relevance*100).toFixed(0)}%</span>`:'';
+
+    let tags='';
+    try{
+      const arr=typeof n.tags==='string'?JSON.parse(n.tags||'[]'):n.tags||[];
+      tags=arr.map(t=>`<span class="tag">${t}</span>`).join('');
+    }catch(e){}
+
+    const reasons=sent.reasons&&sent.reasons.length?
+      `<div class="news-reasons">${sent.reasons.map(r=>`<span class="reason">${r}</span>`).join('')}</div>`:'';
+
+    card.innerHTML=`
+      <div class="news-meta">
+        ${n.category?`<span class="badge badge-cat">${n.category}</span>`:''}
+        <span class="badge ${sentCls}">${sent.label}${sent.score?` (${sent.score>0?'+':''}${sent.score})`:''}</span>
+        ${impactCls?`<span class="badge ${impactCls}">${sent.impact==='high'?'HIGH':'MED'}</span>`:''}
+        ${relScore}
+        <span class="news-time">${timeAgo}</span>
+      </div>
+      <div class="news-title"><a href="${n.url||'#'}" target="_blank">${n.title||''}</a></div>
+      ${n.summary?`<div class="news-summary">${(n.summary||'').slice(0,150)}</div>`:''}
+      ${reasons}
+      ${tags?`<div class="news-tags">${tags}</div>`:''}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function loadMore(){
+  currentOffset+=PAGE_SIZE;
+  loadNews();
+}
+
+function formatTimeAgo(ts){
+  if(!ts)return'';
+  const d=new Date(ts);
+  const now=new Date();
+  const diff=Math.floor((now-d)/1000);
+  if(diff<60)return'방금 전';
+  if(diff<3600)return Math.floor(diff/60)+'분 전';
+  if(diff<86400)return Math.floor(diff/3600)+'시간 전';
+  return Math.floor(diff/86400)+'일 전';
+}
+
+init();
+setInterval(()=>{if(!isSearchMode&&currentOffset===0)loadNews();},60000);
+</script>
+</body>
+</html>

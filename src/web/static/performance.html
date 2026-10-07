@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>봇별 일간 성과 — ZeroTrade</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #e6edf3; --muted: #8b949e;
+  --accent: #58a6ff;
+  --pos: #3fb950; --neg: #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: var(--bg); color: var(--text); line-height: 1.5; padding: 16px; }
+header { display: flex; align-items: center; gap: 16px; padding: 12px 0;
+         border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+header h1 { font-size: 18px; }
+header a { color: var(--accent); font-size: 13px; text-decoration: none; }
+.controls { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+.controls select, .controls button {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 5px 10px;
+  border-radius: 4px; font-size: 13px; cursor: pointer;
+}
+.bot-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+.bot-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px;
+              flex-wrap: wrap; }
+.bot-id { font-size: 15px; font-weight: 600; }
+.bot-meta { font-size: 12px; color: var(--muted); }
+.bot-totals { margin-left: auto; font-size: 13px; }
+.pnl-pos { color: var(--pos); }
+.pnl-neg { color: var(--neg); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+th { text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500;
+     border-bottom: 1px solid var(--border); }
+td { padding: 6px 8px; border-bottom: 1px solid #1a1f24; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+.bar { display: inline-block; height: 10px; background: var(--accent);
+       vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.bar.neg { background: var(--neg); }
+</style>
+</head>
+<body>
+<header>
+  <h1>봇별 일간 성과</h1>
+  <a href="/">Home</a>
+  <a href="/pipes">Pipes</a>
+  <a href="/trades">Trades</a>
+</header>
+
+<div class="controls">
+  <label style="font-size:13px;color:var(--muted)">기간:</label>
+  <select id="daysSel" onchange="load()">
+    <option value="7">최근 7일</option>
+    <option value="14" selected>최근 14일</option>
+    <option value="30">최근 30일</option>
+    <option value="90">최근 90일</option>
+  </select>
+  <button onclick="load()">새로고침</button>
+  <span id="summary" style="margin-left:16px;font-size:12px;color:var(--muted)"></span>
+</div>
+
+<div id="orphans-section" style="margin-bottom:14px;display:none"></div>
+<div id="body"><div class="empty">로딩 중...</div></div>
+
+<script>
+function fmtPnl(n) {
+  if (n === 0) return '0';
+  const sign = n > 0 ? '+' : '';
+  return sign + n.toLocaleString();
+}
+function pnlCls(n) { return n > 0 ? 'pnl-pos' : (n < 0 ? 'pnl-neg' : ''); }
+
+async function load() {
+  const days = document.getElementById('daysSel').value;
+  const body = document.getElementById('body');
+  body.innerHTML = '<div class="empty">로딩 중...</div>';
+  try {
+    const [perfR, orphanR] = await Promise.all([
+      fetch(`/api/bot-performance/daily?days=${days}`).then(r => r.json()),
+      fetch('/api/orphan-holdings?pipe_id=strat-001').then(r => r.json()).catch(() => ({orphans: []})),
+    ]);
+    renderOrphans(orphanR);
+    render(perfR);
+  } catch (e) {
+    body.innerHTML = '<div class="empty">로드 실패: ' + e.message + '</div>';
+  }
+}
+
+let _activeBotIds = [];
+
+function renderOrphans(data) {
+  const section = document.getElementById('orphans-section');
+  const orphans = (data && data.orphans) || [];
+  if (!orphans.length) { section.style.display = 'none'; section.innerHTML = ''; return; }
+
+  // 봇 id 후보 (perf data가 곧 로드되면서 채워짐 — 폴백으로 알려진 봇)
+  const knownBots = (_activeBotIds && _activeBotIds.length)
+    ? _activeBotIds
+    : ['mirinae-2', 'mirinae-3', 'stealth-volume'];
+
+  const rows = orphans.map(o => {
+    const opts = knownBots.map(b => `<option value="${b}">${b}</option>`).join('');
+    const px = o.current_price || 0;
+    return `<tr>
+      <td>${o.code} <span style="color:var(--muted)">${o.name||''}</span></td>
+      <td class="num">${o.kis_qty}주</td>
+      <td class="num">${o.bot_attributed_qty}주</td>
+      <td class="num pnl-neg" style="font-weight:600">${o.orphan_qty}주</td>
+      <td class="num">${px ? px.toLocaleString() : '—'}</td>
+      <td>
+        <select id="bot-${o.code}" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:3px 6px;border-radius:4px;font-size:12px">${opts}</select>
+        <button onclick="assignOrphan('${o.code}', ${o.orphan_qty}, ${px})" style="background:var(--accent);color:#0d1117;border:none;padding:4px 10px;margin-left:4px;border-radius:4px;font-size:12px;cursor:pointer">할당</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  section.style.display = 'block';
+  section.innerHTML = `<div class="bot-card" style="border-left:3px solid var(--neg)">
+    <div class="bot-header">
+      <span class="bot-id">⚠️ 관리되지 않는 보유 주식 (Orphan)</span>
+      <span class="bot-meta">KIS 잔고에 있지만 어느 봇도 청구하지 않은 종목 — 봇에 소유 할당</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>종목</th>
+        <th style="text-align:right">KIS</th>
+        <th style="text-align:right">봇합계</th>
+        <th style="text-align:right">Orphan</th>
+        <th style="text-align:right">현재가</th>
+        <th>할당</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function assignOrphan(code, qty, price) {
+  const botSel = document.getElementById('bot-' + code);
+  if (!botSel) return;
+  const bot_id = botSel.value;
+  if (!confirm(`종목 ${code} ${qty}주를 ${bot_id} 봇에 할당하시겠습니까?\n(봇 ledger에 추가, 현금 변화 없음)`)) return;
+  try {
+    const r = await fetch('/api/orphan-holdings/assign', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pipe_id: 'strat-001', code, bot_id, qty, price}),
+    });
+    const d = await r.json();
+    if (d.success) {
+      alert(`할당 완료: ${code} ${qty}주 → ${bot_id}`);
+      load();
+    } else {
+      alert('할당 실패: ' + (d.error || 'unknown'));
+    }
+  } catch (e) {
+    alert('요청 실패: ' + e.message);
+  }
+}
+
+function render(data) {
+  const body = document.getElementById('body');
+  const bots = data.bots || [];
+  // 활성 봇 id 캐시 (orphan UI의 봇 셀렉터에 사용)
+  _activeBotIds = bots.map(b => b.bot_id);
+  const bench = data.benchmark || {code: '', name: '', days: [], total_pct: 0};
+  const benchByDate = {};
+  (bench.days || []).forEach(d => { benchByDate[d.date] = d.return_pct; });
+
+  if (!bots.length && !bench.days.length) {
+    body.innerHTML = '<div class="empty">기간 내 거래 없음</div>';
+    document.getElementById('summary').textContent = '';
+    return;
+  }
+
+  // 요약 (기간 복리 기준으로 변경)
+  let totalPnl = 0;
+  bots.forEach(b => totalPnl += b.totals.pnl);
+  const periodPct = (bench.period_return_pct !== undefined) ? bench.period_return_pct : bench.total_pct;
+  const benchCls = periodPct >= 0 ? 'pnl-pos' : 'pnl-neg';
+  const startDt = bench.start_date || '';
+  const endDt = bench.end_date || '';
+  const startClose = bench.start_close, endClose = bench.end_close;
+  const priceDelta = (startClose && endClose) ? `${startClose.toLocaleString()} → ${endClose.toLocaleString()}원` : '';
+  document.getElementById('summary').innerHTML =
+    `총 PnL ${fmtPnl(totalPnl)}원 · 활성 봇 ${bots.length}개 · ${data.period_days}일 ` +
+    `· <span style="color:var(--accent)">${bench.name||bench.code}</span> ` +
+    `<span class="${benchCls}">${periodPct >= 0 ? '+' : ''}${periodPct.toFixed(2)}%</span>` +
+    (priceDelta ? ` <span style="color:var(--muted)">(${priceDelta}, ${startDt}~${endDt})</span>` : '');
+
+  // ROI 절대값 최대로 바 길이 정규화 (null = 계산불가일 → 0 취급)
+  const maxAbsRoi = Math.max(0.001, ...bots.flatMap(b => b.days.map(d => Math.abs(d.roi_pct || 0))));
+
+  // 벤치마크 전용 카드 (맨 위)
+  const benchCardHtml = (bench.days && bench.days.length) ? `
+    <div class="bot-card" style="border-left:3px solid var(--accent)">
+      <div class="bot-header">
+        <span class="bot-id">📊 ${bench.name} <span class="bot-meta">(${bench.code} · 벤치마크)</span></span>
+        <span class="bot-totals">
+          <span class="${pnlCls(bench.total_pct)}" style="font-size:15px;font-weight:600">${bench.total_pct >= 0 ? '+' : ''}${bench.total_pct.toFixed(2)}%</span>
+          <span style="color:var(--muted);margin-left:8px;font-size:11px">${data.period_days}일 누적</span>
+        </span>
+      </div>
+      <table>
+        <thead><tr><th>날짜</th><th style="text-align:right">일간 변동</th></tr></thead>
+        <tbody>${bench.days.map(d => `<tr>
+          <td>${d.date}${d.source === 'realtime' ? ' <span style="color:var(--accent);font-size:11px">장중</span>' : ''}</td>
+          <td class="num ${d.return_pct == null ? '' : pnlCls(d.return_pct)}">${d.return_pct == null ? '<span style="color:var(--muted)">—</span>' : (d.return_pct >= 0 ? '+' : '') + d.return_pct.toFixed(3) + '%'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
+
+  const botsHtml = bots.map(b => {
+    const t = b.totals;
+    const win = t.wins + t.losses;
+    const winRate = win > 0 ? ((t.win_rate * 100).toFixed(1) + '%') : '—';
+    const alphaSum = t.alpha_pct_sum;
+    const benchSum = t.benchmark_pct_sum;
+    const daysHtml = (b.days || []).map(d => {
+      const barW = Math.min(100, Math.abs(d.roi_pct) / maxAbsRoi * 100);
+      const barCls = d.roi_pct < 0 ? 'bar neg' : 'bar';
+      const benchRet = benchByDate[d.date];
+      const benchTxt = (benchRet === undefined || benchRet === null)
+        ? '<span style="color:var(--muted)">—</span>'
+        : `<span class="${pnlCls(benchRet)}">${benchRet >= 0 ? '+' : ''}${benchRet.toFixed(2)}%</span>`;
+      const alphaVal = d.alpha_pct;
+      const alphaTxt = (alphaVal === null || alphaVal === undefined)
+        ? '<span style="color:var(--muted)">—</span>'
+        : `<span class="${pnlCls(alphaVal)}" style="font-weight:600">${alphaVal >= 0 ? '+' : ''}${alphaVal.toFixed(2)}%</span>`;
+      return `<tr>
+        <td>${d.date}</td>
+        <td class="num"><span class="${barCls}" style="width:${barW}px"></span><span class="${pnlCls(d.pnl)}">${fmtPnl(d.pnl)}</span></td>
+        <td class="num ${d.roi_pct == null ? '' : pnlCls(d.roi_pct)}">${d.roi_pct == null ? '<span style="color:var(--muted)">—</span>' : (d.roi_pct >= 0 ? '+' : '') + d.roi_pct.toFixed(3) + '%'}</td>
+        <td class="num">${benchTxt}</td>
+        <td class="num">${alphaTxt}</td>
+        <td class="num">${d.trades}</td>
+        <td class="num">${d.wins}/${d.losses}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty">거래 없음</td></tr>';
+
+    // 기간 anchor 알파 (진짜 기회비용 비교) — % 와 KRW 둘 다
+    const benchPct = t.benchmark_period_pct;
+    const benchKrw = t.benchmark_period_value;
+    const alphaPct = t.alpha_pct;
+    const alphaKrw = t.alpha_krw;
+
+    // 위 한 줄 비교 박스
+    const compareBox = (benchPct !== undefined) ? `
+      <div style="margin:6px 0 10px 0;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">
+        <div>
+          <div style="color:var(--muted);font-size:11px">봇이 실제 한 결과</div>
+          <div class="${pnlCls(t.pnl)}" style="font-weight:600">${fmtPnl(t.pnl)}원 (${t.roi_pct >= 0 ? '+' : ''}${t.roi_pct.toFixed(2)}%)</div>
+        </div>
+        <div>
+          <div style="color:var(--muted);font-size:11px">KODEX 200에 풀투입했으면</div>
+          <div class="${pnlCls(benchPct)}" style="font-weight:600">${benchKrw !== undefined ? fmtPnl(benchKrw) + '원' : '—'} (${benchPct >= 0 ? '+' : ''}${benchPct.toFixed(2)}%)</div>
+        </div>
+        <div>
+          <div style="color:var(--muted);font-size:11px">알파 (봇 − 보유)</div>
+          <div class="${pnlCls(alphaPct)}" style="font-weight:700">${alphaKrw !== undefined ? fmtPnl(alphaKrw) + '원' : '—'} (${alphaPct >= 0 ? '+' : ''}${alphaPct.toFixed(2)}%)</div>
+        </div>
+      </div>` : '';
+
+    // 일별 합산 알파(참고) — 활성일 한정
+    const dailyAlphaBadge = (alphaSum !== undefined && alphaSum !== null) ? `
+      <span style="color:var(--muted);font-size:11px;margin-left:8px">활성일 한정 α ${alphaSum >= 0 ? '+' : ''}${alphaSum.toFixed(2)}%</span>` : '';
+
+    return `<div class="bot-card">
+      <div class="bot-header">
+        <span class="bot-id">${b.bot_id}</span>
+        <span class="bot-meta">예산 ${b.budget.toLocaleString()}원 · 거래 ${t.trades}회 · 승률 ${winRate}${dailyAlphaBadge}</span>
+      </div>
+      ${compareBox}
+      <table>
+        <thead><tr>
+          <th>날짜</th>
+          <th style="text-align:right">손익</th>
+          <th style="text-align:right">ROI%</th>
+          <th style="text-align:right">벤치</th>
+          <th style="text-align:right">알파</th>
+          <th style="text-align:right">거래</th>
+          <th style="text-align:right">W/L</th>
+        </tr></thead>
+        <tbody>${daysHtml}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = benchCardHtml + botsHtml;
+}
+
+load();
+</script>
+</body>
+</html>

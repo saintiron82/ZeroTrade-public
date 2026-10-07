@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade - Bot Designer</title>
+<style>
+  :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  a { color:var(--accent); text-decoration:none; }
+  .container { max-width:900px; margin:0 auto; padding:16px; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:16px; }
+  header h1 { font-size:18px; flex:1; }
+  nav a { font-size:13px; margin-left:12px; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; }
+  .card h2 { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+  label { font-size:12px; color:var(--muted); display:block; margin-bottom:2px; margin-top:8px; }
+  input, select, textarea { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:6px; font-size:13px; }
+  input:focus, textarea:focus { outline:none; border-color:var(--accent); }
+  textarea { min-height:60px; resize:vertical; }
+  .btn { border:none; padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer; color:#fff; font-weight:500; }
+  .btn-primary { background:var(--accent); }
+  .btn-green { background:var(--green); }
+  .btn-gray { background:var(--border); color:var(--text); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* 프리셋 */
+  .presets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .preset-btn { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 14px; cursor:pointer; font-size:12px; color:var(--text); }
+  .preset-btn:hover { border-color:var(--accent); }
+  .preset-btn.active { border-color:var(--accent); background:rgba(88,166,255,.1); }
+
+  /* 조건 카드 */
+  .cond-list { display:flex; flex-direction:column; gap:6px; }
+  .cond-item { display:flex; gap:6px; align-items:center; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; }
+  .cond-item select, .cond-item input { width:auto; flex:1; }
+  .cond-item .remove { background:var(--red); color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px; }
+
+  /* 결과 */
+  .result { margin-top:12px; padding:12px; background:var(--bg); border:1px solid var(--green); border-radius:8px; display:none; }
+  .result.show { display:block; }
+  .result.error { border-color:var(--red); }
+
+  .row { display:flex; gap:12px; }
+  .row > * { flex:1; }
+  .slider-row { display:flex; align-items:center; gap:8px; }
+  .slider-row input[type=range] { flex:1; accent-color:var(--accent); }
+  .slider-row .val { width:50px; text-align:right; font-weight:600; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Bot Designer</h1>
+    <nav><a href="/">Dashboard</a><a href="/pipes">Pipes</a><a href="/bots">Bots</a><a href="/news">News</a></nav>
+  </header>
+
+  <!-- AI 설계 -->
+  <div class="card">
+    <h2>AI 봇 설계</h2>
+    <label>전략 설명 (자연어)</label>
+    <textarea id="aiDesc" placeholder="예: RSI 30 이하에서 ETF 매수, 거래량이 평소 2배 이상일 때만 진입. 70 이상이면 매도."></textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="aiDesign()" id="aiBtn">AI 설계</button>
+      <span style="font-size:11px;color:var(--muted);align-self:center">또는 프리셋 선택:</span>
+    </div>
+    <div class="presets" id="presetBar" style="margin-top:8px"></div>
+  </div>
+
+  <!-- 스펙 편집 -->
+  <div class="card" id="specEditor" style="display:none">
+    <h2>봇 스펙</h2>
+    <div class="row">
+      <div><label>봇 ID</label><input id="specId" placeholder="my-custom-bot"></div>
+      <div><label>이름</label><input id="specName" placeholder="커스텀 봇"></div>
+    </div>
+    <div class="row">
+      <div><label>카테고리</label>
+        <select id="specCat"><option value="모멘텀">모멘텀</option><option value="역추세">역추세</option><option value="커스텀">커스텀</option></select>
+      </div>
+      <div><label>스캔 간격 (초)</label><input type="number" id="specInterval" value="60"></div>
+    </div>
+    <label>설명</label>
+    <input id="specDesc" placeholder="전략 한 줄 설명">
+
+    <!-- 진입 조건 -->
+    <h2 style="margin-top:14px">진입 조건</h2>
+    <div style="margin-bottom:6px">
+      <select id="entryLogic" style="width:auto"><option value="AND">AND (모두 충족)</option><option value="OR">OR (하나만)</option></select>
+    </div>
+    <div class="cond-list" id="entryConditions"></div>
+    <button class="btn btn-gray" style="margin-top:6px" onclick="addCondition('entry')">+ 조건 추가</button>
+
+    <!-- 청산 조건 -->
+    <h2 style="margin-top:14px">청산 조건</h2>
+    <div class="slider-row"><label style="width:90px;margin:0">트레일링 스탑</label><input type="range" min="-5" max="0" step="0.1" value="-0.8" oninput="this.nextElementSibling.textContent=this.value+'%'" id="exitTrailing"><span class="val">-0.8%</span></div>
+    <div class="slider-row"><label style="width:90px;margin:0">익절선</label><input type="range" min="0.5" max="10" step="0.1" value="1.5" oninput="this.nextElementSibling.textContent='+'+this.value+'%'" id="exitTP"><span class="val">+1.5%</span></div>
+    <div class="slider-row"><label style="width:90px;margin:0">손절선</label><input type="range" min="-10" max="0" step="0.1" value="-2.0" oninput="this.nextElementSibling.textContent=this.value+'%'" id="exitSL"><span class="val">-2.0%</span></div>
+    <div class="cond-list" id="exitConditions" style="margin-top:6px"></div>
+    <button class="btn btn-gray" style="margin-top:6px" onclick="addCondition('exit')">+ 청산 조건 추가</button>
+
+    <!-- 제한 -->
+    <h2 style="margin-top:14px">제한 규칙</h2>
+    <div class="row">
+      <div><label>일일 최대 거래</label><input type="number" id="limitTrades" value="3" min="1" max="20"></div>
+      <div><label>최소 보유 (분)</label><input type="number" id="limitHold" value="15" min="1" max="120"></div>
+      <div><label>최대 보유 수</label><input type="number" id="limitPositions" value="1" min="1" max="5"></div>
+    </div>
+
+    <!-- 생성 버튼 -->
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-green" onclick="saveBotSpec()" id="saveBtn">봇 생성</button>
+      <button class="btn btn-gray" onclick="resetEditor()">초기화</button>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="result" id="resultBox"></div>
+</div>
+
+<script>
+const API='';
+let indicators={};
+
+async function init(){
+  const [indRes, preRes]=await Promise.all([
+    fetch(API+'/api/bots/design/indicators').then(r=>r.json()),
+    fetch(API+'/api/bots/design/presets').then(r=>r.json()),
+  ]);
+  indicators=indRes.indicators||{};
+  renderPresets(preRes.presets||{});
+}
+
+function renderPresets(presets){
+  const bar=document.getElementById('presetBar');
+  bar.innerHTML=Object.entries(presets).map(([k,v])=>
+    `<div class="preset-btn" onclick="loadPreset('${k}')">${v.name}<div style="font-size:10px;color:var(--muted)">${v.description}</div></div>`
+  ).join('');
+}
+
+async function loadPreset(name){
+  const r=await fetch(API+'/api/bots/design',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({preset:name})});
+  const d=await r.json();
+  if(d.success) loadSpec(d.spec);
+  else showResult(d.error||'실패',true);
+}
+
+async function aiDesign(){
+  const desc=document.getElementById('aiDesc').value.trim();
+  if(!desc){alert('전략 설명을 입력하세요');return;}
+  const btn=document.getElementById('aiBtn');
+  btn.disabled=true;btn.textContent='AI 분석 중...';
+  try{
+    const r=await fetch(API+'/api/bots/design',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({description:desc})});
+    const d=await r.json();
+    if(d.success) loadSpec(d.spec);
+    else showResult(d.error||'AI 설계 실패',true);
+  }catch(e){showResult('오류: '+e.message,true);}
+  btn.disabled=false;btn.textContent='AI 설계';
+}
+
+function loadSpec(spec){
+  document.getElementById('specEditor').style.display='';
+  document.getElementById('specId').value=spec.bot_id||'';
+  document.getElementById('specName').value=spec.name||'';
+  document.getElementById('specDesc').value=spec.description||'';
+  document.getElementById('specCat').value=spec.category||'커스텀';
+  document.getElementById('specInterval').value=spec.interval_seconds||60;
+  document.getElementById('entryLogic').value=(spec.entry||{}).logic||'AND';
+
+  // 진입 조건
+  const el=document.getElementById('entryConditions');
+  el.innerHTML='';
+  ((spec.entry||{}).conditions||[]).forEach(c=>addConditionRow('entry',c));
+
+  // 청산
+  const exit=spec.exit||{};
+  setSlider('exitTrailing',exit.trailing_stop_pct||-0.8);
+  setSlider('exitTP',exit.take_profit_pct||1.5);
+  setSlider('exitSL',exit.hard_stop_pct||-2.0);
+  const exEl=document.getElementById('exitConditions');
+  exEl.innerHTML='';
+  (exit.conditions||[]).forEach(c=>addConditionRow('exit',c));
+
+  // 제한
+  const lim=spec.limits||{};
+  document.getElementById('limitTrades').value=lim.max_daily_trades||3;
+  document.getElementById('limitHold').value=lim.min_hold_minutes||15;
+  document.getElementById('limitPositions').value=lim.max_positions||1;
+}
+
+function setSlider(id,val){
+  const el=document.getElementById(id);
+  el.value=val;
+  const label=el.nextElementSibling;
+  if(label)label.textContent=(val>0?'+':'')+val+'%';
+}
+
+function addCondition(type){addConditionRow(type,{indicator:'rsi',operator:'<=',value:30});}
+
+function addConditionRow(type,cond){
+  const list=document.getElementById(type+'Conditions');
+  const div=document.createElement('div');
+  div.className='cond-item';
+  const opts=Object.entries(indicators).map(([k,v])=>
+    `<option value="${k}" ${k===cond.indicator?'selected':''}>${v.label}</option>`).join('');
+  const opOpts=['>=','<=','>','<','==','!='].map(o=>
+    `<option value="${o}" ${o===cond.operator?'selected':''}>${o}</option>`).join('');
+  div.innerHTML=`
+    <select class="cond-ind">${opts}</select>
+    <select class="cond-op" style="width:60px">${opOpts}</select>
+    <input class="cond-val" value="${cond.value||''}" style="width:70px" placeholder="값">
+    <button class="remove" onclick="this.parentElement.remove()">x</button>
+  `;
+  list.appendChild(div);
+}
+
+function collectSpec(){
+  const entry=[];
+  document.querySelectorAll('#entryConditions .cond-item').forEach(el=>{
+    const ind=el.querySelector('.cond-ind').value;
+    const op=el.querySelector('.cond-op').value;
+    let val=el.querySelector('.cond-val').value;
+    if(val==='true')val=true; else if(val==='false')val=false;
+    else if(!isNaN(val)&&val!=='')val=parseFloat(val);
+    entry.push({indicator:ind,operator:op,value:val});
+  });
+  const exitConds=[];
+  document.querySelectorAll('#exitConditions .cond-item').forEach(el=>{
+    const ind=el.querySelector('.cond-ind').value;
+    const op=el.querySelector('.cond-op').value;
+    let val=el.querySelector('.cond-val').value;
+    if(!isNaN(val)&&val!=='')val=parseFloat(val);
+    exitConds.push({indicator:ind,operator:op,value:val});
+  });
+  return {
+    bot_id:document.getElementById('specId').value.trim(),
+    name:document.getElementById('specName').value.trim(),
+    description:document.getElementById('specDesc').value.trim(),
+    category:document.getElementById('specCat').value,
+    interval_seconds:+document.getElementById('specInterval').value,
+    target_codes:["069500","091160","102110","122630","305720"],
+    entry:{logic:document.getElementById('entryLogic').value,conditions:entry},
+    exit:{
+      trailing_stop_pct:+document.getElementById('exitTrailing').value,
+      take_profit_pct:+document.getElementById('exitTP').value,
+      hard_stop_pct:+document.getElementById('exitSL').value,
+      conditions:exitConds
+    },
+    limits:{
+      max_daily_trades:+document.getElementById('limitTrades').value,
+      min_hold_minutes:+document.getElementById('limitHold').value,
+      max_positions:+document.getElementById('limitPositions').value,
+      market_close_force:true
+    }
+  };
+}
+
+async function saveBotSpec(){
+  const spec=collectSpec();
+  if(!spec.bot_id){alert('봇 ID를 입력하세요');return;}
+  if(!spec.entry.conditions.length){alert('진입 조건이 없습니다');return;}
+  const btn=document.getElementById('saveBtn');
+  btn.disabled=true;
+  const r=await fetch(API+'/api/bots/design/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec})});
+  const d=await r.json();
+  btn.disabled=false;
+  if(d.success){
+    showResult(`봇 "${spec.name}" (${spec.bot_id}) 생성 완료! <a href="/bots">봇 카탈로그</a>에서 확인하세요. 파이프에 연결하려면 <a href="/pipes">Pipes</a>로 이동.`,false);
+  } else {
+    showResult(d.error||'저장 실패',true);
+  }
+}
+
+function showResult(msg,isError){
+  const el=document.getElementById('resultBox');
+  el.className='result show'+(isError?' error':'');
+  el.innerHTML=msg;
+}
+
+function resetEditor(){
+  document.getElementById('specEditor').style.display='none';
+  document.getElementById('resultBox').className='result';
+}
+
+init();
+</script>
+</body>
+</html>

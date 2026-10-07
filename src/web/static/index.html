@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroTrade</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --accent: #58a6ff;
+  }
+  body.mode-paper  { --accent: #58a6ff; }
+  body.mode-live   { --accent: #f85149; }
+  body.mode-disabled { --accent: #8b949e; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+  /* LIVE 경고 배너 */
+  #live-banner { display: none; background: var(--red); color: #fff; text-align: center; padding: 8px 16px; font-size: 14px; font-weight: 600; position: sticky; top: 0; z-index: 100; }
+  #live-banner button { background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); padding: 2px 10px; border-radius: 4px; margin-left: 12px; cursor: pointer; font-size: 12px; }
+  body.mode-live #live-banner { display: block; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  .header-badges { display: flex; gap: 8px; align-items: center; }
+
+  .badge { padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: default; }
+  .status-badge.running { background: rgba(63,185,80,0.15); color: var(--green); }
+  .status-badge.stopped { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* 모드 뱃지 */
+  .mode-badge { position: relative; cursor: pointer; user-select: none; }
+  .mode-badge.paper { background: rgba(88,166,255,0.15); color: #58a6ff; }
+  .mode-badge.live { background: rgba(248,81,73,0.25); color: #f85149; animation: pulse 1.5s infinite; }
+  .mode-badge.disabled { background: rgba(139,148,158,0.15); color: #8b949e; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  /* 모드 드롭다운 */
+  .mode-dropdown { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; min-width: 200px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .mode-dropdown.open { display: block; }
+  .mode-option { padding: 8px 16px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; }
+  .mode-option:hover { background: var(--bg); }
+  .mode-option .check { color: var(--green); }
+  .mode-option.live-opt { color: var(--red); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .full-width { grid-column: 1 / -1; }
+
+  input, select, textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 14px; width: 100%; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 60px; }
+
+  button { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+  button:hover { opacity: 0.9; }
+  button.danger { background: var(--red); }
+  button.secondary { background: var(--border); color: var(--text); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+  .stock-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stock-chip { background: var(--bg); border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px; font-size: 13px; font-family: monospace; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); }
+  .up { color: var(--red); }
+  .down { color: #58a6ff; }
+
+  #events-log { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+  .event-item { padding: 4px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .event-item .time { color: var(--muted); margin-right: 8px; }
+  .event-item.trigger { color: var(--yellow); }
+  .event-item.order { color: var(--green); }
+  .event-item.error { color: var(--red); }
+  .event-item.system { color: var(--accent); }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { text-align: center; }
+  .stat .value { font-size: 18px; font-weight: 700; }
+  .stat .label { font-size: 12px; color: var(--muted); }
+
+  .conditions-list { max-height: 250px; overflow-y: auto; }
+  .cond-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .cond-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .cond-action { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+  .cond-action.buy { background: rgba(63,185,80,0.15); color: var(--green); }
+  .cond-action.sell { background: rgba(248,81,73,0.15); color: var(--red); }
+  .cond-rules { font-size: 12px; color: var(--muted); }
+
+  .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .chat-container { display: flex; flex-direction: column; height: 420px; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .chat-msg { margin-bottom: 10px; display: flex; gap: 8px; }
+  .chat-msg.user { justify-content: flex-end; }
+  .chat-msg .bubble { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .chat-msg.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .chat-msg.ai .bubble { background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .chat-msg.ai .avatar { width: 28px; height: 28px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; font-weight: bold; }
+  .chat-msg.ai .avatar.claude { background: #d97757; color: white; }
+  .chat-msg.ai .avatar.codex { background: #10a37f; color: white; }
+  .chat-msg.ai .avatar.copilot { background: #6cc644; color: white; }
+
+  /* Provider tabs */
+  .provider-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:8px; }
+  .provider-tab { padding:8px 16px; font-size:13px; font-weight:500; cursor:pointer;
+    border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent;
+    margin-bottom:-2px; transition:all 0.2s; }
+  .provider-tab:hover { color:var(--text); }
+  .provider-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .provider-tab .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  .provider-tab .dot.claude { background:#d97757; }
+  .provider-tab .dot.codex { background:#10a37f; }
+  .provider-tab .dot.copilot { background:#6cc644; }
+
+  /* Tool call cards */
+  .tool-card { background:var(--bg); border:1px solid var(--border); border-radius:6px; margin:6px 0; font-size:12px; }
+  .tool-card-hd { padding:6px 10px; cursor:pointer; color:var(--accent); display:flex; justify-content:space-between; }
+  .tool-card-hd:hover { background:rgba(88,166,255,0.05); }
+  .tool-card-bd { padding:6px 10px; border-top:1px solid var(--border); display:none; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--muted); font-family:monospace; font-size:11px; }
+  .tool-card-bd.open { display:block; }
+  .tool-st { font-size:11px; }
+  .tool-st.run { color:var(--yellow); }
+  .tool-st.ok { color:var(--green); }
+
+  /* Token info */
+  .token-info { font-size:11px; color:var(--muted); margin-top:6px; padding:4px 8px; background:var(--bg); border-radius:4px; display:inline-block; }
+
+  /* Code in chat */
+  .chat-msg .bubble pre { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px; overflow-x:auto; margin:6px 0; }
+  .chat-msg .bubble code { font-family:'SF Mono',Menlo,monospace; font-size:12px; }
+  .chat-msg .bubble p>code, .chat-msg .bubble>code { background:rgba(88,166,255,0.1); padding:1px 4px; border-radius:3px; }
+
+  @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+
+  .chat-msg.system .bubble { background: transparent; color: var(--muted); font-size: 12px; text-align: center; width: 100%; }
+  .chat-input-row { display: flex; gap: 8px; margin-top: 8px; }
+  .chat-input-row input { flex: 1; }
+  .chat-input-row button { flex-shrink: 0; }
+  .chat-provider { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .chat-provider select { width: auto; font-size: 12px; padding: 2px 6px; }
+  .cond-preview { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-top: 6px; font-size: 12px; }
+  .cond-preview .apply-btn { margin-top: 6px; font-size: 12px; padding: 4px 10px; }
+
+  /* 파이프 카드 */
+  .pipe-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; min-width:220px; flex:1; max-width:300px; position:relative; transition:border-color .2s; }
+  .pipe-card.dragover { border-color:var(--accent); box-shadow:0 0 8px rgba(88,166,255,0.3); }
+  .pipe-card .pipe-name { font-weight:600; font-size:14px; margin-bottom:4px; }
+  .pipe-card .pipe-budget { font-size:22px; font-weight:700; }
+  .pipe-card .pipe-bot { font-size:12px; padding:2px 8px; border-radius:4px; display:inline-block; margin-top:4px; }
+  .pipe-card .pipe-bot.linked { background:rgba(88,166,255,0.1); color:var(--accent); }
+  .pipe-card .pipe-bot.empty { background:rgba(139,148,158,0.1); color:var(--muted); border:1px dashed var(--border); }
+  .pipe-card .pipe-holdings { font-size:12px; color:var(--muted); margin-top:6px; }
+  .pipe-card .pipe-pnl { font-size:13px; font-weight:600; margin-top:4px; }
+  .pipe-card .pipe-actions { display:flex; gap:4px; margin-top:8px; }
+  .pipe-card .pipe-actions button { font-size:11px; padding:3px 8px; }
+  .pipe-bar { height:4px; border-radius:2px; background:var(--border); margin-top:6px; }
+  .pipe-bar-fill { height:100%; border-radius:2px; background:var(--accent); }
+
+  /* 봇 드래그 칩 */
+  .bot-chip { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 12px; cursor:grab; font-size:13px; display:flex; align-items:center; gap:6px; transition:border-color .15s; user-select:none; }
+  .bot-chip:hover { border-color:var(--accent); }
+  .bot-chip .bot-risk { display:flex; gap:1px; }
+  .bot-chip .bot-risk span { width:8px; height:8px; border-radius:2px; }
+  .bot-chip .bot-risk span.on { background:var(--red); }
+  .bot-chip .bot-risk span.off { background:var(--border); }
+  .bot-chip.dragging { opacity:0.5; }
+
+  /* 모달 */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 420px; width: 90%; }
+  .modal h3 { font-size: 18px; margin-bottom: 12px; }
+  .modal p { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+  .modal .warn { color: var(--red); font-weight: 600; font-size: 14px; padding: 8px 12px; background: rgba(248,81,73,0.1); border-radius: 6px; margin-bottom: 12px; }
+  .modal input { margin-bottom: 12px; }
+  .modal .btn-row { margin-top: 0; }
+
+  /* 수동 주문 패널 */
+  .manual-order { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .mo-side-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .mo-side { flex: 1; background: var(--border); color: var(--text); }
+  .mo-side.active-buy { background: var(--green); color: #fff; }
+  .mo-side.active-sell { background: var(--red); color: #fff; }
+  .mo-input-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .mo-result { font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+  /* 보유 종합 상황판 */
+  .hb-banner { display: none; background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid var(--red); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .hb-banner.stale { background: rgba(210,153,34,0.15); color: var(--yellow); border-color: var(--yellow); }
+  .hb-bot { display: inline-block; background: rgba(88,166,255,0.12); color: var(--accent); border-radius: 4px; padding: 1px 8px; font-size: 12px; margin: 1px 4px 1px 0; }
+  .hb-warn { display: inline-block; background: rgba(210,153,34,0.18); color: var(--yellow); border: 1px solid var(--yellow); border-radius: 4px; padding: 1px 8px; font-size: 12px; font-weight: 600; margin: 1px 0; }
+  #hb-table td.num, #hb-table th.num { text-align: right; }
+  #hb-table tfoot td { border-bottom: none; border-top: 2px solid var(--border); font-weight: 600; }
+
+  /* 모드 힌트 in bot control */
+  .mode-hint { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; }
+  .mode-hint.paper { background: rgba(88,166,255,0.1); color: #58a6ff; }
+  .mode-hint.live { background: rgba(248,81,73,0.1); color: #f85149; }
+  .mode-hint.disabled { background: rgba(139,148,158,0.1); color: #8b949e; }
+</style>
+</head>
+<body class="mode-paper">
+
+<!-- LIVE 경고 배너 -->
+<div id="live-banner">
+  &#9888; 실전투자 모드 — 실제 돈이 사용됩니다
+  <button onclick="switchMode('paper')">모의투자로 전환</button>
+</div>
+
+<div class="container">
+  <header>
+    <h1>ZeroTrade</h1>
+    <a href="/pipes" style="color:var(--accent);font-size:13px;text-decoration:none;margin-left:12px">Pipes</a>
+    <a href="/bots" style="color:var(--accent);font-size:13px;text-decoration:none">Bots</a>
+    <a href="/trades" style="color:var(--accent);font-size:13px;text-decoration:none">Trades</a>
+    <a href="/performance" style="color:var(--accent);font-size:13px;text-decoration:none">Performance</a>
+    <a href="/news" style="color:var(--accent);font-size:13px;text-decoration:none">News</a>
+    <a href="/logs" style="color:var(--accent);font-size:13px;text-decoration:none">Logs</a>
+    <div class="header-badges">
+      <!-- 모드 뱃지 -->
+      <div style="position:relative">
+        <span id="mode-badge" class="badge mode-badge paper" onclick="toggleModeDropdown()">PAPER 모의투자 &#9662;</span>
+        <div id="mode-dropdown" class="mode-dropdown">
+          <div class="mode-option" onclick="switchMode('disabled')">
+            <span>&#9940; DISABLED (주문 차단)</span>
+            <span class="check" id="check-disabled"></span>
+          </div>
+          <div class="mode-option" onclick="switchMode('paper')">
+            <span>&#128309; PAPER (모의투자)</span>
+            <span class="check" id="check-paper"></span>
+          </div>
+          <div class="mode-option live-opt" onclick="switchMode('live')">
+            <span>&#128308; LIVE (실전투자)</span>
+            <span class="check" id="check-live"></span>
+          </div>
+        </div>
+      </div>
+      <!-- 상급 옵션 -->
+      <div style="position:relative">
+        <span id="adv-badge" class="badge mode-badge disabled" onclick="toggleAdvDropdown()" title="상급 옵션">&#9881;</span>
+        <div id="adv-dropdown" class="mode-dropdown" style="min-width:260px">
+          <div style="padding:8px 16px 4px;font-size:12px;color:var(--muted);font-weight:600">상급 옵션</div>
+          <div class="mode-option" onclick="toggleDerivativeEtf()">
+            <span>파생ETF 거래 (인버스&middot;레버리지)</span>
+            <span class="check" id="check-derivative-etf" style="color:var(--muted)">OFF</span>
+          </div>
+          <div style="padding:4px 16px 8px;font-size:11px;color:var(--muted)">기본 OFF &mdash; 계좌에 파생상품ETF 권한이 있을 때만 켜세요</div>
+        </div>
+      </div>
+      <!-- 봇 상태 뱃지 -->
+      <span id="status-badge" class="badge status-badge stopped">STOPPED</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- 계좌 현황 -->
+    <div class="card">
+      <h2>Account</h2>
+      <div class="stats">
+        <div class="stat"><div class="value" id="acct-cash">-</div><div class="label">예수금 <span id="acct-stale" style="display:none;color:var(--yellow);font-weight:600"></span></div></div>
+        <div class="stat"><div class="value" id="acct-eval">-</div><div class="label">총 평가</div></div>
+        <div class="stat"><div class="value" id="acct-profit">-</div><div class="label">평가손익</div></div>
+        <div class="stat"><div class="value" id="acct-holdings">0</div><div class="label">보유종목</div></div>
+      </div>
+      <div id="mode-hint" class="mode-hint paper" style="margin-top:8px">모의투자 모드</div>
+
+      <!-- 오늘 손익 -->
+      <div class="daily-pnl" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <h2>오늘 손익</h2>
+        <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+          <div class="stat"><div class="value" id="dp-realized">-</div><div class="label">실현손익</div></div>
+          <div class="stat"><div class="value" id="dp-unrealized">-</div><div class="label">평가손익(보유)</div></div>
+          <div class="stat"><div class="value" id="dp-total">-</div><div class="label">종합</div></div>
+        </div>
+        <div id="dp-bots" style="font-size:12px;color:var(--muted);margin-top:8px">로딩 중...</div>
+      </div>
+
+      <!-- 수동 주문 -->
+      <div class="manual-order">
+        <h2>수동 주문</h2>
+        <div class="mo-side-row">
+          <button id="mo-side-buy" class="mo-side active-buy" onclick="setManualSide('buy')">매수</button>
+          <button id="mo-side-sell" class="mo-side" onclick="setManualSide('sell')">매도</button>
+        </div>
+        <select id="mo-holding" onchange="pickManualHolding(this.value)" style="margin-bottom:8px">
+          <option value="">보유종목 빠른 선택…</option>
+        </select>
+        <div class="mo-input-row">
+          <input id="mo-code" placeholder="종목코드 6자리" maxlength="6" inputmode="numeric">
+          <input id="mo-qty" type="number" min="1" placeholder="수량">
+          <input id="mo-price" type="number" min="0" placeholder="비우면 시장가">
+        </div>
+        <div class="btn-row">
+          <button id="mo-submit" onclick="submitManualOrder()">주문 실행</button>
+        </div>
+        <div id="mo-result" class="mo-result"></div>
+      </div>
+    </div>
+
+    <!-- 파이프 요약 -->
+    <div class="card">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        Pipes
+        <a href="/pipes" style="font-size:12px;color:var(--accent);text-decoration:none;text-transform:none;letter-spacing:0">관리 &rarr;</a>
+      </h2>
+      <div id="pipe-quick" style="font-size:13px;color:var(--muted)">로딩 중...</div>
+    </div>
+
+    <!-- 보유 종합 상황판 (full width) -->
+    <div class="card full-width">
+      <h2>&#128202; 보유 종합 상황판</h2>
+      <div id="hb-banner" class="hb-banner">&#9888; KIS 잔고 조회 장애 &mdash; 장부 기준 표시 중</div>
+      <table id="hb-table">
+        <thead>
+          <tr>
+            <th>종목</th><th>귀속 봇</th>
+            <th class="num">수량</th><th class="num">평단</th><th class="num">현재가</th>
+            <th class="num">평가손익</th><th class="num">평가액</th>
+          </tr>
+        </thead>
+        <tbody id="hb-body">
+          <tr><td colspan="7" style="color:var(--muted)">로딩 중...</td></tr>
+        </tbody>
+        <tfoot id="hb-foot"></tfoot>
+      </table>
+    </div>
+
+    <!-- AI 채팅 (full width) -->
+    <div class="card full-width">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        AI Chat
+        <div style="display:flex;gap:4px;align-items:center">
+          <select id="session-select" style="width:auto;font-size:12px;padding:2px 6px" onchange="switchSession(this.value)"></select>
+          <button class="secondary" style="font-size:11px;padding:2px 8px" onclick="newSession()">+ New</button>
+          <select id="ai-model" style="width:auto;font-size:12px;padding:2px 6px"><option value="">기본</option></select>
+        </div>
+      </h2>
+      <div class="provider-tabs">
+        <button class="provider-tab active" data-provider="claude" onclick="switchProvider('claude')"><span class="dot claude"></span>Claude</button>
+        <button class="provider-tab" data-provider="codex" onclick="switchProvider('codex')"><span class="dot codex"></span>Codex</button>
+        <button class="provider-tab" data-provider="copilot" onclick="switchProvider('copilot')"><span class="dot copilot"></span>Copilot</button>
+      </div>
+      <div class="chat-container" style="height:500px">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-msg system"><div class="bubble">자연어로 투자 지시를 내리세요. AI가 조건식을 생성합니다.</div></div>
+        </div>
+        <div class="chat-input-row">
+          <input id="chat-input" placeholder="예: 삼성전자 RSI 30 이하면 10만원 매수해줘" onkeydown="if(event.key==='Enter')sendChat()">
+          <button id="btn-chat" onclick="sendChat()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LIVE 전환 모달 -->
+<div id="live-modal" class="modal-overlay">
+  <div class="modal">
+    <h3>&#9888; 실전투자 전환</h3>
+    <div class="warn">실전투자 모드에서는 실제 돈으로 매매됩니다. 손실이 발생할 수 있습니다.</div>
+    <p id="live-modal-step1">확인 코드를 요청합니다...</p>
+    <p id="live-modal-code" style="display:none">아래 코드를 정확히 입력하세요:</p>
+    <div id="live-modal-code-display" style="display:none;font-size:24px;font-weight:700;text-align:center;color:var(--red);padding:8px;background:var(--bg);border-radius:6px;margin-bottom:12px"></div>
+    <input id="live-code-input" style="display:none" placeholder="확인 코드 입력 (예: LIVE-1234)">
+    <div class="btn-row">
+      <button id="btn-live-confirm" onclick="confirmLive()" disabled>확인</button>
+      <button class="secondary" onclick="closeLiveModal()">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+const STOCK_NAMES = {
+  '069500':'KODEX 200', '091160':'KODEX 반도체', '091170':'KODEX 은행', '091180':'KODEX 자동차',
+  '102110':'TIGER 200', '102780':'KODEX 삼성그룹', '102970':'KODEX 증권',
+  '114800':'KODEX 인버스', '117460':'KODEX 에너지화학', '117680':'KODEX 철강',
+  '117700':'KODEX 건설', '122630':'KODEX 레버리지', '123310':'TIGER 인버스',
+  '123320':'TIGER 레버리지', '130680':'TIGER 원유선물', '132030':'KODEX 골드선물(H)',
+  '133690':'TIGER 미국나스닥100', '139260':'TIGER 200 IT', '305720':'KODEX 2차전지산업',
+};
+function stockLabel(code, name = '') {
+  const c = String(code || '').trim();
+  const n = name || STOCK_NAMES[c] || '';
+  return n ? `${n} (${c})` : c;
+}
+const priceData = {};
+let eventSource = null;
+let currentMode = 'paper';
+let liveUnlockCode = '';
+// Per-provider state
+const providerState = {
+  claude:  { sessionId: localStorage.getItem('ff_session_claude') || '' },
+  codex:   { sessionId: localStorage.getItem('ff_session_codex') || '' },
+  copilot: { sessionId: localStorage.getItem('ff_session_copilot') || '' },
+};
+let activeProvider = 'claude';
+
+// ── 모드 관리 ──
+async function loadMode() {
+  try {
+    const r = await fetch(API + '/api/mode');
+    const d = await r.json();
+    setModeUI(d.mode);
+    setDerivativeEtfUI(!!d.allow_derivative_etf);
+  } catch(e) {}
+}
+
+function setModeUI(mode) {
+  currentMode = mode;
+  const body = document.body;
+  body.className = `mode-${mode}`;
+
+  const badge = document.getElementById('mode-badge');
+  const hint = document.getElementById('mode-hint');
+  const btnStart = document.getElementById('btn-start');
+
+  // 수동 주문 — DISABLED면 실행 버튼 비활성
+  const moSubmit = document.getElementById('mo-submit');
+  if (moSubmit) moSubmit.disabled = (mode === 'disabled');
+
+  document.getElementById('check-disabled').textContent = mode === 'disabled' ? '\u2713' : '';
+  document.getElementById('check-paper').textContent = mode === 'paper' ? '\u2713' : '';
+  document.getElementById('check-live').textContent = mode === 'live' ? '\u2713' : '';
+
+  if (mode === 'disabled') {
+    badge.className = 'badge mode-badge disabled';
+    badge.innerHTML = 'DISABLED \u25BE';
+    hint.className = 'mode-hint disabled';
+    hint.textContent = '주문 비활성화 — 시세 조회/AI 분석만 가능';
+    btnStart.disabled = true;
+  } else if (mode === 'paper') {
+    badge.className = 'badge mode-badge paper';
+    badge.innerHTML = 'PAPER 모의투자 \u25BE';
+    hint.className = 'mode-hint paper';
+    hint.textContent = '모의투자 모드 — 시세 조회/분석 가능, 주문은 모의 서버';
+    btnStart.disabled = false;
+  } else if (mode === 'live') {
+    badge.className = 'badge mode-badge live';
+    badge.innerHTML = '\u26A0 LIVE 실전투자 \u25BE';
+    hint.className = 'mode-hint live';
+    hint.textContent = '\u26A0 실전투자 모드 — 실제 돈이 사용됩니다!';
+    btnStart.disabled = false;
+  }
+}
+
+function toggleModeDropdown() {
+  document.getElementById('adv-dropdown').classList.remove('open');
+  document.getElementById('mode-dropdown').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.mode-badge') && !e.target.closest('.mode-dropdown')) {
+    document.getElementById('mode-dropdown').classList.remove('open');
+    document.getElementById('adv-dropdown').classList.remove('open');
+  }
+});
+
+// ── 상급 옵션: 파생ETF 거래 토글 (기본 OFF) ──
+let derivativeEtfEnabled = false;
+
+function toggleAdvDropdown() {
+  document.getElementById('mode-dropdown').classList.remove('open');
+  document.getElementById('adv-dropdown').classList.toggle('open');
+}
+
+function setDerivativeEtfUI(on) {
+  derivativeEtfEnabled = on;
+  const el = document.getElementById('check-derivative-etf');
+  el.textContent = on ? 'ON' : 'OFF';
+  el.style.color = on ? 'var(--green)' : 'var(--muted)';
+}
+
+async function toggleDerivativeEtf() {
+  const next = !derivativeEtfEnabled;
+  if (next && !confirm('파생ETF(인버스·레버리지) 거래를 허용할까요?\n계좌에 파생상품ETF 권한이 신청되어 있어야 합니다.')) return;
+  try {
+    const r = await fetch(API + '/api/mode/derivative-etf', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ enabled: next }),
+    });
+    const d = await r.json();
+    setDerivativeEtfUI(!!d.allow_derivative_etf);
+  } catch(e) { alert('설정 변경 실패: ' + e.message); }
+}
+
+async function switchMode(mode) {
+  document.getElementById('mode-dropdown').classList.remove('open');
+
+  if (mode === 'live') {
+    openLiveModal();
+    return;
+  }
+
+  const endpoint = mode === 'disabled' ? '/api/mode/set-disabled' : '/api/mode/set-paper';
+  await fetch(API + endpoint, { method: 'POST' });
+  setModeUI(mode);
+}
+
+// ── LIVE 전환 모달 ──
+async function openLiveModal() {
+  const modal = document.getElementById('live-modal');
+  modal.classList.add('open');
+
+  // 초기 상태: 로딩 표시
+  const step1 = document.getElementById('live-modal-step1');
+  const codeLabel = document.getElementById('live-modal-code');
+  const codeDisplay = document.getElementById('live-modal-code-display');
+  const codeInput = document.getElementById('live-code-input');
+  const confirmBtn = document.getElementById('btn-live-confirm');
+
+  step1.textContent = '확인 코드를 요청하고 있습니다...';
+  step1.style.display = 'block';
+  codeLabel.style.display = 'none';
+  codeDisplay.style.display = 'none';
+  codeInput.style.display = 'none';
+  codeInput.value = '';
+  confirmBtn.disabled = true;
+
+  try {
+    const r = await fetch(API + '/api/mode/request-live', { method: 'POST' });
+    const d = await r.json();
+    liveUnlockCode = d.unlock_code;
+
+    // 코드 표시
+    step1.style.display = 'none';
+    codeLabel.style.display = 'block';
+    codeDisplay.style.display = 'block';
+    codeDisplay.textContent = liveUnlockCode;
+    codeInput.style.display = 'block';
+    codeInput.focus();
+    confirmBtn.disabled = false;
+  } catch(e) {
+    step1.textContent = '코드 요청 실패: ' + e.message;
+  }
+}
+
+async function confirmLive() {
+  const input = document.getElementById('live-code-input').value.trim();
+  const r = await fetch(API + '/api/mode/confirm-live', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ code: input }),
+  });
+  const d = await r.json();
+  if (d.success) {
+    closeLiveModal();
+    setModeUI('live');
+    addEvent('system', '\u26A0 실전투자 모드 활성화');
+  } else {
+    alert(d.message);
+  }
+}
+
+function closeLiveModal() {
+  document.getElementById('live-modal').classList.remove('open');
+  document.getElementById('live-code-input').value = '';
+}
+
+// ── SSE ──
+function connectSSE() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(API + '/api/events');
+  eventSource.addEventListener('tick', e => { const d = JSON.parse(e.data).data; priceData[d.stock_code] = d; renderPrices(); });
+  eventSource.addEventListener('trigger', e => { const d = JSON.parse(e.data); addEvent('trigger', `[조건충족] ${d.data.stock_name} ${d.data.action.toUpperCase()} \u2014 ${d.data.reason}`); });
+  eventSource.addEventListener('order', e => { const d = JSON.parse(e.data).data; addEvent('order', `[주문${d.success?'성공':'실패'}] ${d.stock_code} ${d.action}`); loadTrades(); });
+  eventSource.addEventListener('system', e => { const d = JSON.parse(e.data).data; addEvent('system', d.message); });
+  eventSource.addEventListener('error', e => { if (e.data) { const d = JSON.parse(e.data).data; addEvent('error', d.message); }});
+}
+
+function renderPrices() {
+  const tbody = document.getElementById('price-table');
+  const empty = document.getElementById('price-empty');
+  const codes = Object.keys(priceData);
+  if (!codes.length) return;
+  empty.style.display = 'none';
+  tbody.innerHTML = codes.map(code => {
+    const d = priceData[code];
+    const cls = d.change_rate >= 0 ? 'up' : 'down';
+    const sign = d.change_rate >= 0 ? '+' : '';
+    return `<tr><td style="font-family:monospace">${code}</td><td class="${cls}" style="font-weight:600">${Number(d.price).toLocaleString()}</td><td class="${cls}">${sign}${d.change_rate}%</td><td>${Number(d.acc_volume).toLocaleString()}</td><td>${d.rsi!=null?d.rsi:'-'}</td><td>${d.macd!=null?d.macd:'-'}</td></tr>`;
+  }).join('');
+}
+
+function addEvent(type, message) {
+  const log = document.getElementById('events-log');
+  if (!log) return;
+  const time = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.className = `event-item ${type}`;
+  div.innerHTML = `<span class="time">${time}</span>${message}`;
+  log.prepend(div);
+  if (log.children.length > 100) log.lastChild.remove();
+}
+
+// ── API ──
+async function loadStatus() {
+  try {
+    const r = await fetch(API + '/api/status');
+    const d = await r.json();
+    const badge = document.getElementById('status-badge');
+    badge.textContent = d.running ? 'RUNNING' : 'STOPPED';
+    badge.className = 'badge status-badge ' + (d.running ? 'running' : 'stopped');
+    if (currentMode !== 'disabled') {
+      document.getElementById('btn-start').disabled = d.running;
+    }
+    document.getElementById('btn-stop').disabled = !d.running;
+    if (d.watched_stocks && d.watched_stocks.length) {
+      document.getElementById('watched-stocks').innerHTML = '<div class="stock-list">' + d.watched_stocks.map(s => `<span class="stock-chip">${s}</span>`).join('') + '</div>';
+    }
+  } catch(e) {}
+}
+
+async function loadConditionFiles() {
+  try {
+    const r = await fetch(API + '/api/conditions/files'); const d = await r.json();
+    const sel = document.getElementById('conditions-select');
+    sel.innerHTML = '<option value="">파일을 선택하세요</option>';
+    d.files.forEach(f => { sel.innerHTML += `<option value="${f}">${f}</option>`; });
+  } catch(e) {}
+}
+
+async function loadConditions() {
+  try {
+    const r = await fetch(API + '/api/conditions'); const d = await r.json();
+    const el = document.getElementById('conditions-list');
+    if (!d.conditions.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">조건식 없음</p>'; return; }
+    el.innerHTML = d.conditions.map(c => `<div class="cond-item"><div class="cond-header"><span><strong>${c.stock_name||c.stock_code}</strong> <code style="font-size:12px">${c.stock_code}</code></span><span class="cond-action ${c.action}">${c.action.toUpperCase()}</span></div><div class="cond-rules">${c.rules.map(r=>`${r.indicator} ${r.operator} ${r.value}`).join(' & ')}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">${c.reason}</div></div>`).join('');
+  } catch(e) {}
+}
+
+async function loadAccount() {
+  try {
+    const bal = await fetch(API+'/api/account/balance').then(r=>r.json());
+    const s = bal.summary || {};
+    // KIS 플래핑 중 캐시 서빙(stale) — 값은 그대로 쓰되 기준 시각 표시
+    const staleEl = document.getElementById('acct-stale');
+    if (bal.stale) {
+      const t = bal.as_of ? new Date(bal.as_of) : null;
+      const hhmm = (t && !isNaN(t)) ?
+        `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}` : '--:--';
+      staleEl.textContent = `⚠ ${hhmm} 기준`;
+      staleEl.style.display = 'inline';
+    } else {
+      staleEl.style.display = 'none';
+    }
+    document.getElementById('acct-cash').textContent = s.cash != null ? s.cash.toLocaleString()+'원' : '-';
+    document.getElementById('acct-eval').textContent = s.total_eval != null ? s.total_eval.toLocaleString()+'원' : '-';
+    const prof = s.total_profit ?? 0;
+    const profEl = document.getElementById('acct-profit');
+    profEl.textContent = (prof>0?'+':'')+prof.toLocaleString()+'원';
+    profEl.style.color = prof>=0 ? 'var(--green)' : 'var(--red)';
+    const realHoldings = (bal.holdings||[]).filter(h => h.quantity > 0);
+    document.getElementById('acct-holdings').textContent = realHoldings.length;
+    renderManualHoldings(realHoldings);
+    // 오늘 손익 위젯 — 보유 평가손익은 balance 데이터 재사용 (별도 API 호출 없음)
+    holdingsProfitSum = realHoldings.reduce((s, h) => s + (Number(h.profit_amount) || 0), 0);
+    renderDailyPnl();
+  } catch(e) { console.warn('account load error:', e); }
+}
+
+// ── 오늘 손익 ──
+let dailyPnlData = null;
+let holdingsProfitSum = 0;
+
+function pnlColor(v) { return v >= 0 ? 'var(--green)' : 'var(--red)'; }
+function pnlFmt(v) { return (v > 0 ? '+' : '') + Number(v).toLocaleString(); }
+
+async function loadDailyPnl() {
+  try {
+    const r = await fetch(API + '/api/pnl/daily');
+    dailyPnlData = await r.json();
+    renderDailyPnl();
+  } catch(e) { console.warn('daily pnl load error:', e); }
+}
+
+function renderDailyPnl() {
+  const d = dailyPnlData;
+  if (!d || d.error) return;
+  const realized = d.total_realized || 0;
+  const combined = realized + holdingsProfitSum;
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    el.textContent = pnlFmt(v) + '원';
+    el.style.color = pnlColor(v);
+  };
+  set('dp-realized', realized);
+  set('dp-unrealized', holdingsProfitSum);
+  set('dp-total', combined);
+  const list = document.getElementById('dp-bots');
+  const bots = d.bots || [];
+  if (!bots.length) { list.textContent = '오늘 거래 없음'; return; }
+  list.innerHTML = bots.map(b =>
+    `<div><span style="color:var(--text)">${b.source}</span> ` +
+    `<span style="color:${pnlColor(b.realized)};font-weight:600">${pnlFmt(b.realized)}</span>` +
+    (b.return_pct != null ? ` <span style="color:${pnlColor(b.return_pct)};font-size:12px">(${b.return_pct > 0 ? '+' : ''}${b.return_pct}%)</span>` : '') +
+    ` (${b.buys}매수/${b.sells}매도)</div>`).join('');
+}
+
+// ── 보유 종합 상황판 ──
+async function loadHoldingsBoard() {
+  try {
+    const d = await fetch(API + '/api/holdings/overview').then(r => r.json());
+    renderHoldingsBoard(d);
+  } catch(e) { console.warn('holdings board load error:', e); }
+}
+
+function renderHoldingsBoard(d) {
+  // 실잔고를 신뢰할 수 있을 때만 mismatch 뱃지 표시 — 장애 중 거짓 경고가 더 해롭다
+  const trusted = !!d.ok && !d.stale;
+  const banner = document.getElementById('hb-banner');
+  if (!d.ok) {
+    banner.className = 'hb-banner';
+    banner.innerHTML = '&#9888; KIS 잔고 조회 장애 &mdash; 장부 기준 표시 중';
+    banner.style.display = 'block';
+  } else if (d.stale) {
+    banner.className = 'hb-banner stale';
+    banner.innerHTML = `&#9888; KIS 잔고 장애 &mdash; 마지막 정상값 표시 중 (${d.as_of || '시각 미상'})`;
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+  const body = document.getElementById('hb-body');
+  const foot = document.getElementById('hb-foot');
+  const all = d.holdings || [];
+  // 실계좌 보유만 표에 표시. 장부 전용 잔재(실잔고 0)는 표에서 제외하되
+  // 건수만 푸터에 알림 — 단, KIS 조회가 완전 실패(ok:false)면 장부가 유일한
+  // 정보원이므로 장부 행을 그대로 보여준다.
+  const rows = d.ok ? all.filter(h => Number(h.kis_qty) > 0) : all;
+  const ledgerOnly = d.ok ? all.filter(h => Number(h.kis_qty) <= 0 && Number(h.ledger_qty) > 0) : [];
+
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">보유 종목 없음</td></tr>';
+  } else {
+    body.innerHTML = rows.map(h => {
+      let owners = (h.owners || []).map(o => `<span class="hb-bot">${o.source} ${o.qty}주</span>`).join('');
+      if (trusted && h.mismatch !== 0) {
+        // mismatch = kis_qty - ledger_qty → 장부 관점 부호는 반대
+        const delta = -h.mismatch;
+        owners += ` <span class="hb-warn">&#9888; 장부 ${delta > 0 ? '+' : ''}${delta}</span>`;
+      }
+      if (!owners) owners = '<span style="color:var(--muted)">-</span>';
+      const profit = Number(h.profit_amount) || 0;
+      const rate = Number(h.profit_rate) || 0;
+      return `<tr>
+        <td><strong>${h.name || h.code}</strong> <code style="font-size:12px;color:var(--muted)">${h.code}</code></td>
+        <td>${owners}</td>
+        <td class="num">${Number(h.kis_qty).toLocaleString()}주</td>
+        <td class="num">${h.avg_price ? Number(h.avg_price).toLocaleString() : '-'}</td>
+        <td class="num">${h.current_price ? Number(h.current_price).toLocaleString() : '-'}</td>
+        <td class="num" style="color:${pnlColor(profit)}">${pnlFmt(profit)}원 (${rate > 0 ? '+' : ''}${rate}%)</td>
+        <td class="num">${Number(h.eval_amount).toLocaleString()}원</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const t = d.totals || {};
+  const evalSum = Number(t.eval_amount) || 0;
+  const profitSum = Number(t.profit_amount) || 0;
+  const cash = Number(d.cash) || 0;
+  const residue = ledgerOnly.length
+    ? `<tr><td colspan="7" style="color:var(--muted);font-size:12px">장부 전용 잔재 ${ledgerOnly.length}건 (실계좌에 없음: ${ledgerOnly.map(h => h.code).join(', ')}) &mdash; 표시 생략</td></tr>`
+    : '';
+  foot.innerHTML = `<tr>
+    <td colspan="5">합계 &middot; 현금 ${cash.toLocaleString()}원 &middot; 총자산 ${(evalSum + cash).toLocaleString()}원</td>
+    <td class="num" style="color:${pnlColor(profitSum)}">${pnlFmt(profitSum)}원</td>
+    <td class="num">${evalSum.toLocaleString()}원</td>
+  </tr>` + residue;
+}
+
+// ── 수동 주문 ──
+let manualSide = 'buy';
+let manualHoldings = [];
+
+function setManualSide(side) {
+  manualSide = side;
+  document.getElementById('mo-side-buy').className = 'mo-side' + (side === 'buy' ? ' active-buy' : '');
+  document.getElementById('mo-side-sell').className = 'mo-side' + (side === 'sell' ? ' active-sell' : '');
+}
+
+function renderManualHoldings(holdings) {
+  manualHoldings = holdings || [];
+  const sel = document.getElementById('mo-holding');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">보유종목 빠른 선택…</option>' +
+    manualHoldings.map(h => `<option value="${h.stock_code}">${stockLabel(h.stock_code, h.name)} — ${h.quantity}주</option>`).join('');
+  sel.value = prev;
+}
+
+function pickManualHolding(code) {
+  if (!code) return;
+  const h = manualHoldings.find(x => x.stock_code === code);
+  if (!h) return;
+  document.getElementById('mo-code').value = h.stock_code;
+  document.getElementById('mo-qty').value = h.quantity;
+  setManualSide('sell');
+}
+
+function showManualResult(msg, ok) {
+  const el = document.getElementById('mo-result');
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  el.textContent = msg;
+}
+
+async function submitManualOrder() {
+  const code = document.getElementById('mo-code').value.trim();
+  const qty = parseInt(document.getElementById('mo-qty').value, 10);
+  const priceRaw = document.getElementById('mo-price').value.trim();
+  const price = priceRaw === '' ? 0 : parseInt(priceRaw, 10);
+
+  // confirm 문구가 30초 폴링 stale 값이 되지 않도록 모드 1회 재조회
+  try { setModeUI((await (await fetch(API + '/api/mode')).json()).mode); } catch(e) {}
+
+  if (currentMode === 'disabled') { showManualResult('주문 비활성화 상태입니다 — 모드를 변경하세요', false); return; }
+  if (!/^\d{6}$/.test(code)) { showManualResult('종목코드는 6자리 숫자여야 합니다', false); return; }
+  if (!Number.isInteger(qty) || qty <= 0) { showManualResult('수량은 1 이상이어야 합니다', false); return; }
+  if (!Number.isInteger(price) || price < 0) { showManualResult('가격은 0 이상이어야 합니다 (비우면 시장가)', false); return; }
+
+  const sideLabel = manualSide === 'buy' ? '매수' : '매도';
+  const priceLabel = price > 0 ? `지정가 ${price.toLocaleString()}원` : '시장가';
+  if (!confirm(`현재 모드: ${currentMode.toUpperCase()}\n${stockLabel(code)} ${qty}주 ${priceLabel} ${sideLabel}를 실행할까요?`)) return;
+
+  const btn = document.getElementById('mo-submit');
+  btn.disabled = true;
+  showManualResult('주문 전송 중...', true);
+  try {
+    const r = await fetch(API + '/api/manual/order', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ side: manualSide, code, qty, price }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      showManualResult(`${sideLabel} 주문 성공 — 주문번호 ${d.order_no || '-'} (${d.qty}주 @${Number(d.price).toLocaleString()}원)`, true);
+      addEvent('order', `[수동 주문] ${stockLabel(code)} ${qty}주 ${sideLabel} 성공`);
+      loadAccount();
+    } else {
+      showManualResult('실패: ' + (d.error || '알 수 없는 오류'), false);
+    }
+  } catch(e) {
+    showManualResult('요청 오류: ' + e.message, false);
+  }
+  btn.disabled = (currentMode === 'disabled');
+}
+
+async function startBot() {
+  if (currentMode === 'disabled') { alert('주문 비활성화 상태입니다.'); return; }
+  const file = document.getElementById('conditions-select').value;
+  if (!file) { alert('조건식 파일을 선택하세요'); return; }
+  const dryRun = currentMode === 'paper';
+  if (currentMode === 'live' && !confirm('\u26A0 실전투자 모드입니다. 실제 돈으로 매매합니다. 계속하시겠습니까?')) return;
+  const r = await fetch(API+'/api/bot/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conditions_file:file, dry_run:dryRun})});
+  const d = await r.json();
+  if (d.error) { addEvent('error', d.error); return; }
+  loadStatus(); loadConditions();
+}
+
+async function stopBot() { await fetch(API+'/api/bot/stop',{method:'POST'}); loadStatus(); }
+
+// ── 채팅 ──
+function appendChat(role, html, provider = '') {
+  const el = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  if (role==='ai') {
+    let avatarText = 'AI';
+    let avatarClass = 'avatar';
+    if (provider === 'claude') { avatarText = 'Cla'; avatarClass += ' claude'; }
+    else if (provider === 'codex') { avatarText = 'Cod'; avatarClass += ' codex'; }
+    else if (provider === 'copilot') { avatarText = 'Cop'; avatarClass += ' copilot'; }
+    div.innerHTML = `<div class="${avatarClass}">${avatarText}</div><div class="bubble">${html}</div>`;
+  }
+  else if (role==='user') div.innerHTML = `<div class="bubble">${html}</div>`;
+  else div.innerHTML = `<div class="bubble">${html}</div>`;
+  el.appendChild(div); el.scrollTop = el.scrollHeight; return div;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim(); if (!msg) return; input.value = '';
+  appendChat('user', msg);
+  const btn = document.getElementById('btn-chat'); btn.disabled = true;
+  input.disabled = true; input.placeholder = 'AI 응답 대기 중...';
+  try {
+    if (activeProvider === 'claude') {
+      await sendChatStreaming(msg);
+    } else {
+      await sendChatBlocking(msg);
+    }
+  } catch(e) {
+    appendChat('ai', `<span style="color:var(--red)">오류: ${e.message}</span>`, activeProvider);
+  }
+  btn.disabled = false; input.disabled = false;
+  input.placeholder = '예: 삼성전자 RSI 30 이하면 10만원 매수해줘'; input.focus();
+}
+
+async function sendChatStreaming(msg) {
+  const state = providerState.claude;
+  const model = document.getElementById('ai-model').value;
+  const el = document.getElementById('chat-messages');
+
+  // Create AI bubble for streaming
+  const div = document.createElement('div');
+  div.className = 'chat-msg ai';
+  div.innerHTML = '<div class="avatar claude">Cla</div><div class="bubble"><span class="streaming-text"></span><span class="cursor" style="animation:blink 1s infinite">|</span></div>';
+  el.appendChild(div); el.scrollTop = el.scrollHeight;
+
+  const textSpan = div.querySelector('.streaming-text');
+  const cursorSpan = div.querySelector('.cursor');
+  const bubble = div.querySelector('.bubble');
+  let fullText = '';
+  const toolCards = {};
+
+  const params = new URLSearchParams({
+    message: msg, provider: 'claude', model: model, session_id: state.sessionId
+  });
+
+  return new Promise((resolve, reject) => {
+    const evtSource = new EventSource(API + '/api/chat/stream?' + params);
+
+    evtSource.addEventListener('text', e => {
+      const data = JSON.parse(e.data);
+      fullText += data.delta;
+      textSpan.innerHTML = renderMarkdown(fullText);
+      el.scrollTop = el.scrollHeight;
+    });
+
+    evtSource.addEventListener('tool_use', e => {
+      const data = JSON.parse(e.data);
+      const card = document.createElement('div');
+      card.className = 'tool-card';
+      card.id = 'tool-' + data.tool_id;
+      const toolName = data.tool_name.replace('mcp__ff-trading__', '');
+      card.innerHTML =
+        '<div class="tool-card-hd" onclick="this.nextElementSibling.classList.toggle(\'open\')">' +
+        '<span>🔧 ' + toolName + '</span>' +
+        '<span class="tool-st run">실행 중...</span></div>' +
+        '<div class="tool-card-bd">입력: ' + JSON.stringify(data.input, null, 2) + '</div>';
+      bubble.insertBefore(card, cursorSpan);
+      toolCards[data.tool_id] = card;
+      el.scrollTop = el.scrollHeight;
+    });
+
+    evtSource.addEventListener('tool_result', e => {
+      const data = JSON.parse(e.data);
+      const card = toolCards[data.tool_id];
+      if (card) {
+        card.querySelector('.tool-st').textContent = '완료';
+        card.querySelector('.tool-st').className = 'tool-st ok';
+        card.querySelector('.tool-card-bd').textContent += '\n결과: ' + data.content;
+      }
+    });
+
+    evtSource.addEventListener('done', e => {
+      const data = JSON.parse(e.data);
+      if (cursorSpan.parentNode) cursorSpan.remove();
+      if (data.usage) {
+        const u = data.usage;
+        const info = document.createElement('div');
+        info.className = 'token-info';
+        const inTok = (u.input_tokens || 0).toLocaleString();
+        const outTok = (u.output_tokens || 0).toLocaleString();
+        const cost = data.total_cost_usd ? ' · $' + data.total_cost_usd.toFixed(4) : '';
+        info.textContent = '토큰: ' + inTok + ' in / ' + outTok + ' out' + cost;
+        bubble.appendChild(info);
+      }
+    });
+
+    evtSource.addEventListener('session', e => {
+      const data = JSON.parse(e.data);
+      if (data.session_id) {
+        state.sessionId = data.session_id;
+        localStorage.setItem('ff_session_claude', data.session_id);
+        loadSessions();
+      }
+      evtSource.close();
+      resolve();
+    });
+
+    evtSource.addEventListener('error', e => {
+      if (cursorSpan.parentNode) cursorSpan.remove();
+      try {
+        if (e.data) {
+          const data = JSON.parse(e.data);
+          textSpan.innerHTML += '<span style="color:var(--red)">오류: ' + data.message + '</span>';
+        }
+      } catch(ex) {}
+      evtSource.close();
+      resolve();
+    });
+
+    evtSource.onerror = () => { evtSource.close(); resolve(); };
+  });
+}
+
+async function sendChatBlocking(msg) {
+  const state = providerState[activeProvider];
+  const model = document.getElementById('ai-model').value;
+  const thinkingDiv = appendChat('ai', '<span class="loading"></span> 분석 중...', activeProvider);
+  const r = await fetch(API+'/api/chat', { method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({message:msg, provider:activeProvider, model:model, session_id: state.sessionId})});
+  const d = await r.json(); thinkingDiv.remove();
+  if (d.session_id && d.session_id !== state.sessionId) {
+    state.sessionId = d.session_id;
+    localStorage.setItem('ff_session_' + activeProvider, d.session_id);
+    loadSessions();
+  }
+  if (d.error) { appendChat('ai', '<span style="color:var(--red)">' + d.error + '</span>', activeProvider); }
+  else {
+    let reply = d.reply || '';
+    if (d.conditions && d.conditions.length) {
+      reply += '\n\n<div class="cond-preview"><strong>' + d.conditions.length + '개 조건식 생성</strong> (' + d.file + ')';
+      d.conditions.forEach(c => { const rules = c.rules.map(r=>r.indicator+' '+r.operator+' '+r.value).join(' & ');
+        reply += '\n<div style="margin-top:4px"><span class="cond-action '+c.action+'" style="display:inline-block">'+c.action.toUpperCase()+'</span> <strong>'+(c.stock_name||c.stock_code)+'</strong> — '+rules+'</div><div style="color:var(--muted)">'+(c.reason||'')+'</div>'; });
+      reply += '\n<button class="apply-btn" onclick="applyConditions(\''+d.file+'\')">적용하기</button></div>';
+    }
+    appendChat('ai', reply, activeProvider); if (d.file) loadConditionFiles();
+  }
+}
+
+function renderMarkdown(text) {
+  let html = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    '<pre><code class="lang-' + (lang||'text') + '">' + code + '</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function switchProvider(provider) {
+  activeProvider = provider;
+  document.querySelectorAll('.provider-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.provider === provider);
+  });
+  loadSessions();
+  onProviderChange();
+}
+
+// ── 세션 관리 ──
+async function loadSessions() {
+  try {
+    const r = await fetch(API + '/api/sessions?provider=' + activeProvider);
+    const d = await r.json();
+    const sel = document.getElementById('session-select');
+    sel.innerHTML = '';
+    const state = providerState[activeProvider];
+    (d.sessions || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.title + ' (' + s.message_count + ')';
+      if (s.id === state.sessionId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (state.sessionId) {
+      sel.value = state.sessionId;
+      loadSessionMessages(state.sessionId);
+    } else if (d.sessions && d.sessions.length) {
+      state.sessionId = d.sessions[0].id;
+      localStorage.setItem('ff_session_' + activeProvider, state.sessionId);
+      sel.value = state.sessionId;
+      loadSessionMessages(state.sessionId);
+    } else {
+      document.getElementById('chat-messages').innerHTML =
+        '<div class="chat-msg system"><div class="bubble">자연어로 투자 지시를 내리세요.</div></div>';
+    }
+  } catch(e) {}
+}
+
+async function switchSession(sessionId) {
+  if (!sessionId) return;
+  providerState[activeProvider].sessionId = sessionId;
+  localStorage.setItem('ff_session_' + activeProvider, sessionId);
+  await loadSessionMessages(sessionId);
+}
+
+async function loadSessionMessages(sessionId) {
+  try {
+    const r = await fetch(API+`/api/sessions/${sessionId}`);
+    const d = await r.json();
+    if (d.error) return;
+    const el = document.getElementById('chat-messages');
+    el.innerHTML = '<div class="chat-msg system"><div class="bubble">자연어로 투자 지시를 내리세요. AI가 조건식을 생성합니다.</div></div>';
+    (d.messages||[]).forEach(m => {
+      appendChat(m.role === 'user' ? 'user' : 'ai', m.content, m.provider);
+    });
+  } catch(e) {}
+}
+
+async function newSession() {
+  try {
+    const r = await fetch(API + '/api/sessions?provider=' + activeProvider, {method:'POST'});
+    const d = await r.json();
+    providerState[activeProvider].sessionId = d.id;
+    localStorage.setItem('ff_session_' + activeProvider, d.id);
+    document.getElementById('chat-messages').innerHTML =
+      '<div class="chat-msg system"><div class="bubble">새 대화가 시작되었습니다.</div></div>';
+    await loadSessions();
+    document.getElementById('session-select').value = d.id;
+  } catch(e) {}
+}
+
+async function applyConditions(filename) {
+  appendChat('system', `조건식 "${filename}" 생성됨. Pipes 페이지에서 봇에 연결하세요.`);
+}
+
+// ── 초기화 ──
+if (Notification.permission === 'default') Notification.requestPermission();
+
+async function loadPipeQuick() {
+  try {
+    const r = await fetch(API+'/api/pipes');
+    const d = await r.json();
+    const el = document.getElementById('pipe-quick');
+    const pipes = d.pipes || [];
+    if (!pipes.length) { el.innerHTML = '파이프 없음 — <a href="/pipes" style="color:var(--accent)">생성하기</a>'; return; }
+    const running = pipes.filter(p => p.active).length;
+    el.innerHTML = `${pipes.length}개 파이프 (${running}개 실행중)<br>` +
+      pipes.map(p => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:4px;font-size:12px;background:${p.active?'rgba(63,185,80,.1)':'var(--bg)'};border:1px solid var(--border)">${p.name} ${p.cash.toLocaleString()}원</span>`).join('');
+  } catch(e) {}
+}
+
+connectSSE(); loadMode(); loadAccount(); loadHoldingsBoard(); loadDailyPnl(); loadSessions(); loadPipeQuick(); loadProviderModels();
+setInterval(() => { loadMode(); loadAccount(); loadHoldingsBoard(); loadPipeQuick(); }, 30000);
+setInterval(loadDailyPnl, 60000);
+
+// ── 모델 선택 ──
+let providerModels = {};
+
+async function loadProviderModels() {
+  try {
+    const r = await fetch(API + '/api/models');
+    const d = await r.json();
+    providerModels = d.models || {};
+    onProviderChange();
+  } catch(e) {
+    console.warn('모델 목록 로드 실패:', e);
+  }
+}
+
+function onProviderChange() {
+  const models = providerModels[activeProvider] || [{id:'', name:'기본'}];
+  const sel = document.getElementById('ai-model');
+  sel.innerHTML = '';
+  models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.name; sel.appendChild(o); });
+}
+</script>
+</body>
+</html>

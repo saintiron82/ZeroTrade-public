@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FF - Bot Detail</title>
+<style>
+  :root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  .container { max-width:1100px; margin:0 auto; padding:20px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:16px 0; border-bottom:1px solid var(--border); margin-bottom:20px; }
+  header h1 { font-size:20px; }
+  header a { color:var(--accent); font-size:14px; text-decoration:none; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .stat-row { display:flex; justify-content:space-between; padding:4px 0; font-size:13px; }
+  .stat-row .label { color:var(--muted); }
+  .stat-row .val { font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+  td { padding:6px 8px; border-bottom:1px solid rgba(48,54,61,.5); }
+  .up { color:var(--red); }
+  .down { color:var(--accent); }
+  .source-badge { padding:1px 6px; border-radius:3px; font-size:11px; }
+  .source-badge.ai-chat { background:rgba(88,166,255,.15); color:var(--accent); }
+  .source-badge.etf-momentum { background:rgba(63,185,80,.15); color:var(--green); }
+  .source-badge.condition-bot { background:rgba(210,153,34,.15); color:var(--yellow); }
+  .source-badge.manual { background:rgba(139,148,158,.15); color:var(--muted); }
+  button { border:none; padding:6px 14px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:500; color:#fff; }
+  button.start { background:var(--green); }
+  button.stop { background:var(--red); }
+  button.secondary { background:var(--surface); border:1px solid var(--border); color:var(--text); }
+  button:disabled { opacity:.4; }
+  .pipe-row { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:8px 0; border-top:1px solid rgba(48,54,61,.5); font-size:12px; }
+  .pipe-row:first-child { border-top:none; }
+  .pipe-meta { color:var(--muted); font-size:11px; }
+  .pill { display:inline-block; padding:1px 6px; border-radius:999px; font-size:10px; font-weight:700; }
+  .pill.on { color:var(--green); background:rgba(63,185,80,.12); }
+  .pill.off { color:var(--muted); background:rgba(139,148,158,.12); }
+  .empty { text-align:center; padding:30px; color:var(--muted); }
+  .expandable-text { cursor:pointer; display:block; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.35; }
+  .expandable-text.collapsed { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .expandable-text.expanded { white-space:pre-wrap; overflow:visible; background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.18); border-radius:5px; padding:5px 6px; margin-top:2px; }
+  .expandable-text::after { content:'  클릭해 펼치기'; color:var(--accent); font-size:10px; opacity:.75; }
+  .expandable-text.expanded::after { content:'  접기'; }
+  .report-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .report-tab { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:12px; cursor:pointer; }
+  .report-tab.active { border-color:var(--accent); background:rgba(88,166,255,.12); color:var(--accent); }
+  .report-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:12px; }
+  .report-metric { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; }
+  .report-metric .label { color:var(--muted); font-size:11px; }
+  .report-metric .value { font-weight:700; margin-top:2px; }
+  .report-block { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; margin-top:8px; font-size:13px; }
+  .report-block .title { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1 id="bot-title">Bot Detail</h1>
+    <a href="/bots">&larr; Bot Catalog</a>
+  </header>
+
+  <div class="grid">
+    <!-- 봇 정보 -->
+    <div class="card">
+      <h2>Bot Info</h2>
+      <div id="bot-info"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="start" id="btn-start" onclick="createAndStartManualPipe()">전용 파이프 생성+시작</button>
+        <button class="secondary" onclick="location.href='/pipes'">Pipes 열기</button>
+      </div>
+      <div style="margin-top:14px">
+        <h2 style="margin-bottom:8px">Manual Running</h2>
+        <div id="manual-pipes" style="font-size:12px;color:var(--muted)">연결 파이프 조회 중...</div>
+      </div>
+    </div>
+
+    <!-- UI Spec 기반 위젯 -->
+    <div class="card">
+      <h2>Dashboard</h2>
+      <div id="widget-grid" style="display:grid;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- 보유 종목 보고서 -->
+  <div class="card">
+    <h2>Position Reports</h2>
+    <div id="position-report-tabs"></div>
+    <div id="position-report-body"></div>
+  </div>
+
+  <!-- 거래 내역 -->
+  <div class="card">
+    <h2>Trade History <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0" id="trade-count"></span></h2>
+    <div style="max-height:400px;overflow-y:auto">
+      <table>
+        <thead><tr><th>시간</th><th>종목</th><th>매매</th><th>수량</th><th>가격</th><th>금액</th><th>출처</th><th>사유</th></tr></thead>
+        <tbody id="trade-table"></tbody>
+      </table>
+      <div class="empty" id="trade-empty" style="display:none">거래 내역 없음</div>
+    </div>
+  </div>
+
+  <!-- 최근 스캔 로그 -->
+  <div class="card">
+    <h2>Recent Scans</h2>
+    <div id="scan-log" style="max-height:300px;overflow-y:auto;font-size:12px;font-family:monospace"></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+const STOCK_NAMES = {
+  '069500':'KODEX 200', '091160':'KODEX 반도체', '091170':'KODEX 은행', '091180':'KODEX 자동차',
+  '102110':'TIGER 200', '102780':'KODEX 삼성그룹', '102970':'KODEX 증권',
+  '114800':'KODEX 인버스', '117460':'KODEX 에너지화학', '117680':'KODEX 철강',
+  '117700':'KODEX 건설', '122630':'KODEX 레버리지', '123310':'TIGER 인버스',
+  '123320':'TIGER 레버리지', '130680':'TIGER 원유선물Enhanced(H)',
+  '132030':'KODEX 골드선물(H)', '133690':'TIGER 미국나스닥100', '139260':'TIGER 200 IT',
+  '305720':'KODEX 2차전지산업'
+};
+const botId = window.location.pathname.split('/bots/')[1] || '';
+const sourceMap = {'ai-chat':'AI 채팅','etf-momentum':'ETF 모멘텀','condition-bot':'조건식 봇','manual':'수동','etf-volume-spike':'거래량 봇'};
+let botInfoCache = null;
+let selectedReportCode = '';
+let currentPositionReports = [];
+
+// ── UI Spec 위젯 렌더러 ──
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((o, k) => o && o[k], obj);
+}
+
+function formatValue(val, fmt) {
+  if (val == null) return '-';
+  if (fmt === 'won') return (val >= 0 ? '+' : '') + val.toLocaleString() + '원';
+  if (fmt === 'pct') return (val >= 0 ? '+' : '') + val.toFixed(2) + '%';
+  if (fmt === 'count') return val.toLocaleString() + '건';
+  return String(val);
+}
+
+function fmtWon(v, signed = false) {
+  const n = Number(v || 0);
+  return (signed && n >= 0 ? '+' : '') + Math.round(n).toLocaleString() + '원';
+}
+
+function fmtPct(v, signed = true) {
+  const n = Number(v || 0);
+  return (signed && n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+function colorForRule(val, rule) {
+  if (rule === 'pnl') return val >= 0 ? 'var(--green)' : 'var(--red)';
+  if (rule === 'status') return val ? 'var(--green)' : 'var(--muted)';
+  return 'var(--text)';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+function stockLabel(code, name = '') {
+  const c = String(code || '').trim();
+  if (!c) return '';
+  const n = name || STOCK_NAMES[c] || '';
+  return n ? `${n} (${c})` : c;
+}
+
+function decorateStockCodes(text) {
+  return String(text || '').replace(/(^|[^\(\d])(\d{6})(?![\d\)])/g, (m, prefix, code) => {
+    return prefix + (STOCK_NAMES[code] ? stockLabel(code) : code);
+  });
+}
+
+function expandableText(text, cls = '') {
+  return `<span class="expandable-text collapsed ${cls}" title="클릭해서 전체 보기" onclick="toggleExpand(event)">${esc(decorateStockCodes(text || ''))}</span>`;
+}
+
+function toggleExpand(ev) {
+  ev.stopPropagation();
+  const el = ev.currentTarget;
+  el.classList.toggle('collapsed');
+  el.classList.toggle('expanded');
+}
+
+function actionDetail(t) {
+  const r = t.result || {};
+  const decision = r.decision || r;
+  const execution = r.execution || {};
+  const action = t.action || execution.action || decision.action || decision.decision || '-';
+  const symbol = execution.symbol || decision.symbol || decision.code || t.top || '';
+  const reason = execution.reason || execution.message || r.reason || t.detail || decision.trader_reason || '';
+  const failed = action.startsWith('blocked_') || (execution.success === false);
+  const label = failed ? `${action.toUpperCase()} ${stockLabel(symbol, execution.name || decision.name)}` : `${String(action).toUpperCase()} ${stockLabel(symbol, execution.name || decision.name)}`;
+  return {
+    failed,
+    label: label.trim(),
+    reason,
+    execution,
+    decision,
+  };
+}
+
+function renderWidgets(widgets, status, gridEl) {
+  if (!widgets || !widgets.length) { gridEl.innerHTML = ''; return; }
+  const cols = 2;
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  gridEl.innerHTML = widgets.map(w => {
+    const [cw, ch] = (w.size || '1x1').split('x').map(Number);
+    const style = `grid-column:span ${cw};grid-row:span ${ch};background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px`;
+    const val = getNestedValue(status, w.data_key);
+
+    if (w.type === 'stat') {
+      const display = formatValue(val, w.format);
+      const color = colorForRule(val, w.color_rule);
+      return `<div style="${style}"><div style="font-size:11px;color:var(--muted)">${w.label}</div><div style="font-size:20px;font-weight:700;color:${color}">${display}</div></div>`;
+    }
+    if (w.type === 'badge') {
+      const label = val ? 'RUNNING' : 'STOPPED';
+      const color = colorForRule(val, w.color_rule);
+      return `<div style="${style}"><div style="font-size:11px;color:var(--muted)">${w.label}</div><div style="font-size:16px;font-weight:600;color:${color}">${label}</div></div>`;
+    }
+    if (w.type === 'text') {
+      let content = '-';
+      if (val && typeof val === 'object') {
+        content = val.code ? `${stockLabel(val.code, val.name)} ${val.qty}주 @${(val.price||0).toLocaleString()}원` : '없음';
+      }
+      return `<div style="${style}"><div style="font-size:11px;color:var(--muted)">${w.label}</div><div style="font-size:14px">${content}</div></div>`;
+    }
+    if (w.type === 'table') {
+      const rows = Array.isArray(val) ? val : [];
+      const cols = w.columns || [];
+      const header = cols.map(c => `<th style="text-align:left;padding:3px 6px;color:var(--muted);font-size:11px">${c.label}</th>`).join('');
+      const body = rows.slice(0, 10).map(r => '<tr>' + cols.map(c => `<td style="padding:3px 6px;font-size:12px">${r[c.key] != null ? r[c.key] : '-'}</td>`).join('') + '</tr>').join('');
+      return `<div style="${style}"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">${w.label} (${rows.length})</div><table style="width:100%;border-collapse:collapse"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+    if (w.type === 'list') {
+      const items = Array.isArray(val) ? val : [];
+      const list = items.slice(-8).map(t => {
+        const d = actionDetail(t);
+        const color = d.failed ? 'var(--red)' : 'var(--text)';
+        const reason = d.reason ? expandableText(d.reason, d.failed ? '' : '') : '';
+        return `<div style="padding:4px 0;font-size:11px;border-bottom:1px solid rgba(48,54,61,.2)">
+          <div><span style="color:var(--muted)">#${t.scan||''} ${t.time||''}</span> <b style="color:${color}">${esc(d.label)}</b></div>
+          ${reason}
+        </div>`;
+      }).join('');
+      return `<div style="${style}"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">${w.label}</div><div style="max-height:150px;overflow-y:auto;font-family:monospace">${list || '없음'}</div></div>`;
+    }
+    return `<div style="${style}">${w.label}: ${JSON.stringify(val)}</div>`;
+  }).join('');
+}
+
+function selectPositionReport(code) {
+  selectedReportCode = code;
+  renderPositionReports(currentPositionReports);
+}
+
+function reportMetric(label, value, cls = '') {
+  return `<div class="report-metric"><div class="label">${esc(label)}</div><div class="value ${cls}">${value}</div></div>`;
+}
+
+function num(v) {
+  const n = Number(v || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function buildReportsFromStatus(status) {
+  const positions = status.positions || [];
+  const last = status.last_analysis || {};
+  const decision = last.decision || {};
+  const reviews = status.position_reviews || last.position_reviews || [];
+  const debate = status.debate_log || [];
+  return positions.filter(p => (p.code || p.symbol) && num(p.qty) > 0).map(p => {
+    const code = p.code || p.symbol;
+    const review = reviews.find(r => (r.code || r.symbol) === code) || {};
+    const useDecision = !decision.code || decision.code === code;
+    const d = useDecision ? decision : {};
+    const latestDebate = [...debate].reverse().find(x => x.code === code) || {};
+    const entry = num(p.entry_price || p.price || p.avg_price);
+    const current = num(p.current_price) || entry;
+    const target = num(p.target_price || review.target_price || d.target_price);
+    const stop = num(p.stop_loss || review.stop_loss || d.stop_loss);
+    const qty = num(p.qty);
+    const unrealized = p.unrealized != null ? num(p.unrealized) : (current - entry) * qty;
+    const pnlPct = p.pnl_pct != null ? num(p.pnl_pct) : (entry ? (current - entry) / entry * 100 : 0);
+    const upside = target ? target - current : 0;
+    const downside = stop ? current - stop : 0;
+    const planSummary = [
+      target ? `목표 ${fmtWon(target)}까지 ${fmtPct(current ? (target - current) / current * 100 : 0)}` : '',
+      stop ? `손절 ${fmtWon(stop)}까지 ${fmtPct(current ? (current - stop) / current * 100 : 0, false)} 여유` : '',
+    ].filter(Boolean).join(', ') || '목표가/손절가 미설정';
+    const sellTrigger = [
+      stop ? `현재가가 ${fmtWon(stop)} 이하로 밀리면 손절/축소 검토` : '',
+      target ? `${fmtWon(target)} 도달 시 익절 또는 목표 상향 재평가` : '',
+    ].filter(Boolean).join('; ') || '명확한 매도/재평가 조건이 아직 기록되지 않았습니다.';
+    const thesis = d.trader_reason || latestDebate.trader || review.reason || '보고서 근거가 아직 충분히 기록되지 않았습니다.';
+    const rr = upside > 0 && downside > 0 ? upside / downside : null;
+    let planWarning = '';
+    if (!target || !stop) planWarning = '목표가/손절가 미설정';
+    else if (stop >= current) planWarning = '손절가가 현재가 이상';
+    else if (target <= current) planWarning = '목표가 도달/초과';
+    else if (rr != null && rr < 1.2) planWarning = `손익비 부족(${rr.toFixed(2)}:1 < 1.20:1)`;
+    return {
+      bot_id: status.bot_id || botId,
+      code,
+      name: p.name || '',
+      qty,
+      entry_price: entry,
+      current_price: current,
+      target_price: target,
+      stop_loss: stop,
+      unrealized,
+      pnl_pct: pnlPct,
+      held_min: num(p.held_min),
+      target_gap_pct: current && target ? (target - current) / current * 100 : 0,
+      stop_gap_pct: current && stop ? (current - stop) / current * 100 : 0,
+      risk_reward: rr,
+      plan_warning: review.plan_warning || planWarning,
+      plan_status: review.plan_status || (planWarning ? 'review' : 'ok'),
+      plan_valid: review.plan_valid != null ? review.plan_valid : !planWarning,
+      decision: review.decision || d.decision || 'hold',
+      target_action: d.target_action || '',
+      confidence: d.confidence || latestDebate.confidence || 0,
+      review_reason: review.reason || '',
+      thesis,
+      hold_rationale: thesis,
+      plan_summary: planSummary,
+      sell_trigger: sellTrigger,
+      bull_summary: d.bull_summary || latestDebate.bull || '',
+      bear_summary: d.bear_summary || latestDebate.bear || '',
+      updated_at: last.time || '',
+    };
+  });
+}
+
+async function loadStatusFromPipes(botId) {
+  try {
+    const pipes = await fetch(`${API}/api/pipes`).then(r => r.json());
+    for (const p of (pipes.pipes || [])) {
+      if (!(p.bots || []).some(b => b.bot_id === botId)) continue;
+      const detail = await fetch(`${API}/api/pipes/${p.id}/bot-status`).then(r => r.json());
+      const row = (detail.bots || []).find(b => b.bot_id === botId);
+      if (row && row.status) return row.status;
+    }
+  } catch (e) {
+    console.warn('pipe status fallback failed', e);
+  }
+  return null;
+}
+
+function renderPositionReports(reports) {
+  currentPositionReports = reports || [];
+  const tabs = document.getElementById('position-report-tabs');
+  const body = document.getElementById('position-report-body');
+  if (!currentPositionReports.length) {
+    selectedReportCode = '';
+    tabs.innerHTML = '';
+    body.innerHTML = '<div class="empty" style="padding:18px">보유 종목 보고서 없음</div>';
+    return;
+  }
+  if (!selectedReportCode || !currentPositionReports.some(r => r.code === selectedReportCode)) {
+    selectedReportCode = currentPositionReports[0].code;
+  }
+  tabs.innerHTML = `<div class="report-tabs">${currentPositionReports.map(r => `
+    <button class="report-tab ${r.code === selectedReportCode ? 'active' : ''}" onclick="selectPositionReport('${esc(r.code)}')">
+      ${esc(stockLabel(r.code, r.name))} · ${r.qty}주
+    </button>
+  `).join('')}</div>`;
+
+  const r = currentPositionReports.find(x => x.code === selectedReportCode) || currentPositionReports[0];
+  const pnlCls = Number(r.unrealized || 0) >= 0 ? 'up' : 'down';
+  const rr = r.risk_reward == null ? '-' : `${Number(r.risk_reward).toFixed(2)}:1`;
+  body.innerHTML = `
+    <div class="report-grid">
+      ${reportMetric('진입가', fmtWon(r.entry_price))}
+      ${reportMetric('현재가', fmtWon(r.current_price))}
+      ${reportMetric('목표가', r.target_price ? fmtWon(r.target_price) : '-')}
+      ${reportMetric('손절가', r.stop_loss ? fmtWon(r.stop_loss) : '-')}
+      ${reportMetric('미실현', fmtWon(r.unrealized, true), pnlCls)}
+      ${reportMetric('수익률', fmtPct(r.pnl_pct), pnlCls)}
+      ${reportMetric('목표까지', r.target_price ? fmtPct(r.target_gap_pct) : '-')}
+      ${reportMetric('손절 여유', r.stop_loss ? fmtPct(r.stop_gap_pct, false) : '-')}
+      ${reportMetric('손익비', rr)}
+      ${reportMetric('보유시간', `${Number(r.held_min || 0).toLocaleString()}분`)}
+      ${reportMetric('판단', esc(String(r.decision || 'hold').toUpperCase()))}
+      ${reportMetric('확신도', r.confidence ? Number(r.confidence).toFixed(2) : '-')}
+    </div>
+    ${r.plan_warning ? `<div class="report-block"><div class="title">계획 검증</div>${esc(r.plan_warning)}</div>` : ''}
+    <div class="report-block"><div class="title">목표/손절 계획</div>${esc(r.plan_summary || '')}</div>
+    <div class="report-block"><div class="title">매도 검토 조건</div>${esc(r.sell_trigger || '')}</div>
+    <div class="report-block"><div class="title">유지 판단 근거</div>${expandableText(r.hold_rationale || r.thesis || '')}</div>
+    ${r.review_reason ? `<div class="report-block"><div class="title">최근 포지션 리뷰</div>${expandableText(r.review_reason)}</div>` : ''}
+    ${r.bull_summary ? `<div class="report-block"><div class="title">강세 근거</div>${expandableText(r.bull_summary)}</div>` : ''}
+    ${r.bear_summary ? `<div class="report-block"><div class="title">약세 리스크</div>${expandableText(r.bear_summary)}</div>` : ''}
+    <div style="margin-top:8px;color:var(--muted);font-size:11px">업데이트: ${esc(r.updated_at || '-')}</div>
+  `;
+}
+
+async function load() {
+  // 봇 정보
+  const r1 = await fetch(`${API}/api/bots/${botId}`);
+  const d1 = await r1.json();
+  botInfoCache = d1;
+  document.getElementById('bot-title').textContent = d1.name || botId;
+
+  const info = document.getElementById('bot-info');
+  info.innerHTML = `
+    <div class="stat-row"><span class="label">ID</span><span class="val">${d1.id}</span></div>
+    <div class="stat-row"><span class="label">버전</span><span class="val">v${d1.version||'-'}</span></div>
+    <div class="stat-row"><span class="label">카테고리</span><span class="val">${d1.category||'-'}</span></div>
+    <div class="stat-row"><span class="label">실행방식</span><span class="val">${d1.bot_type||'-'}</span></div>
+    <div class="stat-row"><span class="label">시간대</span><span class="val">${d1.market_session||'-'}</span></div>
+    <div class="stat-row"><span class="label">위험도</span><span class="val">${'■'.repeat(d1.risk_level||0)+'□'.repeat(5-(d1.risk_level||0))} ${d1.risk_level}/5</span></div>
+    <div style="margin-top:8px;font-size:13px;color:var(--muted)">${d1.description||''}</div>
+  `;
+
+  // 상태
+  let status = d1.status || {};
+  if (!(status.position_reports || []).length && !(status.positions || []).length) {
+    const fallbackStatus = await loadStatusFromPipes(botId);
+    if (fallbackStatus) status = fallbackStatus;
+  }
+  const running = status.running;
+
+  // UI Spec 위젯 렌더링
+  const uiSpec = d1.ui || {};
+  const widgets = uiSpec.widgets || [];
+  if (widgets.length) {
+    renderWidgets(widgets, status, document.getElementById('widget-grid'));
+  }
+
+  // 손익 (fallback — UI Spec 없는 봇용)
+  if (!widgets.length) {
+    const pnl = status.pnl || {};
+    const totalColor = (pnl.total||0) >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('widget-grid').innerHTML = `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px"><div style="font-size:11px;color:var(--muted)">상태</div><div style="font-size:16px;font-weight:600;color:${running?'var(--green)':'var(--muted)'}">${running?'RUNNING':'STOPPED'}</div></div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px"><div style="font-size:11px;color:var(--muted)">총 손익</div><div style="font-size:20px;font-weight:700;color:${totalColor}">${(pnl.total||0)>=0?'+':''}${(pnl.total||0).toLocaleString()}원</div></div>
+    `;
+  }
+
+  const positionReports = (status.position_reports || []).length
+    ? status.position_reports
+    : buildReportsFromStatus(status);
+  renderPositionReports(positionReports);
+
+  // 최근 스캔
+  const scans = status.recent_trades || [];
+  document.getElementById('scan-log').innerHTML = scans.map(t => {
+    const d = actionDetail(t);
+    const color = d.failed ? 'var(--red)' : 'var(--text)';
+    const reason = d.reason ? expandableText(d.reason) : '';
+    const exec = d.execution && Object.keys(d.execution).length
+      ? `<div style="color:var(--muted);font-size:11px;white-space:normal;margin-top:2px">execution: ${esc(JSON.stringify(d.execution))}</div>`
+      : '';
+    return `<div style="padding:6px 0;border-bottom:1px solid rgba(48,54,61,.3)">
+      <div>#${t.scan} ${t.time} → <b style="color:${color}">${esc(d.label)}</b></div>
+      ${reason}
+      ${exec}
+    </div>`;
+  }).join('') || '<div class="empty">스캔 이력 없음</div>';
+
+  // DB 거래 내역 (이 봇의 source로 필터)
+  const sourceKey = botId;
+  if (sourceKey) {
+    const r2 = await fetch(`${API}/api/trades?source=${sourceKey}&limit=50`);
+    const d2 = await r2.json();
+    const trades = d2.trades || [];
+    document.getElementById('trade-count').textContent = `(${trades.length}건)`;
+    const tbody = document.getElementById('trade-table');
+    if (!trades.length) { tbody.innerHTML=''; document.getElementById('trade-empty').style.display=''; return; }
+    tbody.innerHTML = trades.map(t => {
+      const cls = t.side==='buy'?'up':'down';
+      const src = sourceMap[t.source]||t.source;
+      const srcCls = (t.source||'').replace(/[^a-z-]/g,'');
+      return `<tr>
+        <td>${t.timestamp?t.timestamp.slice(11,19):''}</td>
+        <td>${stockLabel(t.stock_code, t.stock_name)}</td>
+        <td class="${cls}">${t.side==='buy'?'BUY':'SELL'}</td>
+        <td>${t.quantity}</td>
+        <td>${t.price?t.price.toLocaleString():'-'}</td>
+        <td>${t.amount?t.amount.toLocaleString():'-'}</td>
+        <td><span class="source-badge ${srcCls}">${src}</span></td>
+        <td style="font-size:11px;color:var(--muted);max-width:200px">${expandableText(t.reason || '')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  await loadManualPipes();
+}
+
+async function loadManualPipes() {
+  const el = document.getElementById('manual-pipes');
+  try {
+    const data = await fetch(`${API}/api/pipes`).then(r => r.json());
+    const pipes = (data.pipes || []).filter(p => (p.bots || []).some(b => b.bot_id === botId));
+    if (!pipes.length) {
+      el.innerHTML = '<div class="empty" style="padding:12px">이 봇이 연결된 파이프가 없습니다. 전용 파이프를 생성해 수동 실행할 수 있습니다.</div>';
+      return;
+    }
+    el.innerHTML = pipes.map(p => `
+      <div class="pipe-row">
+        <div>
+          <div><b>${p.name}</b> <span class="pill ${p.active ? 'on' : 'off'}">${p.active ? 'RUNNING' : 'STOPPED'}</span></div>
+          <div class="pipe-meta">${p.id} · 예산 ${(p.budget || 0).toLocaleString()}원 · 현금 ${(p.cash || 0).toLocaleString()}원</div>
+        </div>
+        <button class="start" onclick="startPipe('${p.id}')" ${p.active ? 'disabled' : ''}>Start</button>
+        <button class="stop" onclick="stopPipe('${p.id}')" ${!p.active ? 'disabled' : ''}>Stop</button>
+        <button class="secondary" onclick="location.href='/pipes'">Open</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.textContent = '연결 파이프 조회 실패: ' + e.message;
+  }
+}
+
+async function createAndStartManualPipe() {
+  const name = botInfoCache?.name || botId;
+  const raw = prompt(`${name} 전용 파이프 예산(원)을 입력하세요.`, '50000');
+  if (raw === null) return;
+  const budget = Number(String(raw).replace(/[^0-9]/g, ''));
+  if (!Number.isFinite(budget) || budget <= 0) {
+    alert('예산은 1원 이상 숫자로 입력해야 합니다.');
+    return;
+  }
+  try {
+    const created = await fetch(`${API}/api/pipes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `수동 ${name}`,
+        budget,
+        bot_id: botId,
+        description: `Manual run pipe for ${botId}`,
+      }),
+    }).then(r => r.json());
+    if (!created.success) {
+      alert(created.error || '파이프 생성 실패');
+      return;
+    }
+    const started = await fetch(`${API}/api/pipes/${created.pipe_id}/start`, { method: 'POST' }).then(r => r.json());
+    if (!started.success) {
+      alert(started.error || started.message || '파이프 시작 실패');
+      await loadManualPipes();
+      return;
+    }
+    await loadManualPipes();
+  } catch (e) {
+    alert('수동 실행 실패: ' + e.message);
+  }
+}
+
+async function startPipe(pipeId) {
+  const result = await fetch(`${API}/api/pipes/${pipeId}/start`, { method:'POST' }).then(r => r.json());
+  if (!result.success) alert(result.error || result.message || '파이프 시작 실패');
+  await loadManualPipes();
+}
+
+async function stopPipe(pipeId) {
+  const result = await fetch(`${API}/api/pipes/${pipeId}/stop`, { method:'POST' }).then(r => r.json());
+  if (!result.success) alert(result.error || result.message || '파이프 정지 실패');
+  await loadManualPipes();
+}
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>
